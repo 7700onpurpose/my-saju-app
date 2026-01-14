@@ -38,10 +38,11 @@ class SajuCalculator:
         self.saeng = {"목": "화", "화": "토", "토": "금", "금": "수", "수": "목"}
         self.geuk = {"목": "토", "토": "수", "수": "화", "화": "금", "금": "목"}
 
+        # ⚡ [수정됨] 무갑충 점수 상향 (3 -> 8)
         self.chung_rules = {
             frozenset(["갑", "경"]): 8, frozenset(["을", "신"]): 5,
             frozenset(["병", "임"]): 8, frozenset(["정", "계"]): 5,
-            frozenset(["무", "갑"]): 3, frozenset(["기", "계"]): 3
+            frozenset(["무", "갑"]): 8, frozenset(["기", "계"]): 3 # 여기가 바뀜!
         }
         self.hap_rules = {
             frozenset(["갑", "기"]): {"토": 8, "목": -5},
@@ -124,7 +125,6 @@ class SajuCalculator:
                     penalty = self.chung_rules[pair]
                     element_scores[my_element] -= penalty
                     total_strength_score -= penalty
-                    # 📝 [수정] 대립 구도 명시
                     logs.append(f"💥 천간충 ({day_gan} 💥 {pillar[0]})! 내 기운 -{penalty}")
 
         # Step 3: 천간합 (표시 변경: 갑 ❤️ 기)
@@ -136,7 +136,6 @@ class SajuCalculator:
                     if score > 0:
                         if elem == my_element or self.saeng[elem] == my_element: total_strength_score += score
                         else: total_strength_score -= score
-                # 📝 [수정] 합 구도 명시
                 logs.append(f"💖 천간합 ({' ❤️ '.join(pair)}) 성립!")
 
         # Step 4: 지지충 (표시 변경: 자 💥 오)
@@ -153,7 +152,6 @@ class SajuCalculator:
                 if l == my_element or self.saeng[l] == my_element: total_strength_score -= sc
                 else: total_strength_score += sc
                 
-                # 📝 [수정] 대립 구도 명시 (set을 list로 변환하여 출력)
                 conflict_str = f"{list(rule_set)[0]} 💥 {list(rule_set)[1]}"
                 logs.append(f"⚔️ 지지충 ({conflict_str})! 승자:{w}(+{sc})")
 
@@ -164,7 +162,6 @@ class SajuCalculator:
                 add = 10 if cnt == 3 else (6 if cnt == 2 else 0)
                 if add > 0:
                     element_scores[target] += add
-                    # 📝 [수정] 어떤 글자들이 모였는지 표시
                     matched = ",".join(rule["members"].intersection(branches_set))
                     logs.append(f"🌀 {rule['name']} ({matched}) +{add}")
                     
@@ -177,7 +174,6 @@ class SajuCalculator:
                 if seq[k] == seq[k+1] and seq[k] != "?":
                     elem = self.gan_elements.get(seq[k], self.ji_elements.get(seq[k]))
                     element_scores[elem] += 10
-                    # 📝 [수정] 병존 명시
                     logs.append(f"👯 병존 ({seq[k]} 🤝 {seq[k]}) +10")
                     
                     if elem == my_element or self.saeng[elem] == my_element: total_strength_score += 10
@@ -210,7 +206,7 @@ class SajuCalculator:
         return element_scores, total_strength_score, my_element, logs
 
 # ---------------------------------------------------------
-# [기능] 차트 (이모지+큰숫자 라벨 적용)
+# [기능] 차트
 # ---------------------------------------------------------
 def send_discord_message(msg):
     try:
