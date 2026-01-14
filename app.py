@@ -168,7 +168,7 @@ class SajuCalculator:
                 if seq[k] == seq[k+1] and seq[k] != "?":
                     elem = self.gan_elements.get(seq[k], self.ji_elements.get(seq[k]))
                     element_scores[elem] += 10
-                    logs.append(f"👯 병존({seq[k]}) +10")
+                    logs.append(f"👯 병존({seq[k]}{seq[k]}) +10")
                     if elem == my_element or self.saeng[elem] == my_element: total_strength_score += 10
                     else: total_strength_score -= 10
 
@@ -273,7 +273,7 @@ st.markdown("""
 calc = SajuCalculator()
 
 with st.form("saju_form", clear_on_submit=False):
-    nickname = st.text_input("닉네임", placeholder="예: 도깨비")
+    nickname = st.text_input("닉네임", placeholder="예: 북극이")
     gender = st.radio("성별", ["여성", "남성"], horizontal=True)
     col1, col2 = st.columns(2)
     with col1: birth_date = st.date_input("생년월일", min_value=datetime(1950, 1, 1))
@@ -281,7 +281,7 @@ with st.form("saju_form", clear_on_submit=False):
     is_unknown_time = st.checkbox("태어난 시간을 몰라요")
     concern = st.text_area("고민이 있다면 적어주세요. 사주를 바탕으로 한 답변을 드립니다. ", height=150)
     contact = st.text_input("고민에 대한 상세한 답변을 받아보실 이메일을 적어주세요.", placeholder="답변 받을 이메일")
-    submitted = st.form_submit_button("최종 정밀 분석 보기")
+    submitted = st.form_submit_button("내 사주 분석 결과 보기")
 
     if submitted:
         if not concern: st.error("고민 내용을 적어주세요!")
@@ -339,4 +339,5 @@ with st.form("saju_form", clear_on_submit=False):
             st.subheader(f"📊 오행 세력 분포 (퍼센트)")
             chart = draw_pie_chart(element_scores)
             st.altair_chart(chart, use_container_width=True)
+
 
