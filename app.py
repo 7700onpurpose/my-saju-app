@@ -199,7 +199,7 @@ class SajuCalculator:
         return element_scores, total_strength_score, my_element, logs
 
 # ---------------------------------------------------------
-# [기능] 차트 (도넛 + 퍼센트)
+# [기능] 차트 (오류 수정됨: transform_filter 사용)
 # ---------------------------------------------------------
 def send_discord_message(msg):
     try:
@@ -209,10 +209,10 @@ def send_discord_message(msg):
     except Exception: pass
 
 def draw_pie_chart(scores):
-    # 1. 데이터 프레임 변환 (음수 제거)
+    # 1. 데이터 프레임 변환
     data = []
     for elem, score in scores.items():
-        safe_score = max(0, score) # 음수는 0으로 처리 (세력 소멸)
+        safe_score = max(0, score)
         data.append({"오행": elem, "점수": safe_score})
     
     df = pd.DataFrame(data)
@@ -231,17 +231,18 @@ def draw_pie_chart(scores):
     )
     
     pie = base.mark_arc(innerRadius=60, outerRadius=120).encode(
-        color=alt.Color("오행", scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="오행 (범례)")),
+        color=alt.Color("오행", scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="오행")),
         order=alt.Order("점수", sort="descending"),
         tooltip=["오행", "점수", alt.Tooltip("비율", format=".1%")]
     )
     
+    # 🚨 [수정된 부분] .filter() 대신 .transform_filter() 사용
     text = base.mark_text(radius=140).encode(
         text=alt.Text("비율", format=".1%"),
         order=alt.Order("점수", sort="descending"),
         color=alt.value("black")
-    ).filter(
-        alt.datum.비율 > 0.05 # 5% 이하 숨김
+    ).transform_filter(
+        alt.datum.비율 > 0.05
     )
     
     return pie + text
