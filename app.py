@@ -17,7 +17,7 @@ ilju_data = {
 default_desc = "아직 설명이 업데이트되지 않았습니다. 운영자가 직접 풀이해 드릴게요!"
 
 # ---------------------------------------------------------
-# [핵심] 사주팔자 계산 & 점수 로직 (고급)
+# [핵심] 사주팔자 계산 & 점수 로직 (충 반영)
 # ---------------------------------------------------------
 class SajuCalculator:
     def __init__(self):
@@ -25,7 +25,6 @@ class SajuCalculator:
         self.ji = list("자축인묘진사오미신유술해")
         self.month_ji = list("인묘진사오미신유술해자축")
         
-        # 오행 매핑
         self.gan_elements = {
             "갑": "목", "을": "목", "병": "화", "정": "화", "무": "토", "기": "토", 
             "경": "금", "신": "금", "임": "수", "계": "수"
@@ -35,15 +34,23 @@ class SajuCalculator:
             "축": "토", "미": "토", "신": "금", "유": "금", "해": "수", "자": "수"
         }
         
-        # 오행 상생상극 (키가 값을 생함: 목생화)
         self.saeng = {"목": "화", "화": "토", "토": "금", "금": "수", "수": "목"}
-        # (키가 값을 극함: 목극토)
         self.geuk = {"목": "토", "토": "수", "수": "화", "화": "금", "금": "목"}
+
+        # ⚡ [추가됨] 천간충 리스트와 패널티 점수
+        # 쌍방향 체크를 위해 세트로 저장
+        self.chung_rules = {
+            frozenset(["갑", "경"]): 8,  # 갑경충
+            frozenset(["을", "신"]): 5,  # 을신충
+            frozenset(["병", "임"]): 8,  # 병임충
+            frozenset(["정", "계"]): 5,  # 정계충
+            frozenset(["무", "갑"]): 3,  # 무갑충 (목극토)
+            frozenset(["기", "계"]): 3   # 기계충 (토극수)
+        }
 
     def get_60ganji(self, gan_idx, ji_idx):
         return self.gan[gan_idx % 10] + self.ji[ji_idx % 12]
 
-    # ... (연주, 월주, 일주, 시주 계산 로직은 이전과 동일) ...
     def get_year_pillar(self, year):
         idx = (year - 1984) % 60
         return self.get_60ganji(idx % 10, idx % 12)
@@ -76,60 +83,64 @@ class SajuCalculator:
         time_gan_idx = (start_gan_idx + time_idx) % 10
         return self.gan[time_gan_idx] + self.ji[time_idx]
 
-    # 🌟 [업그레이드] 위치별 가중치 점수 계산
+    # 🌟 [업그레이드] 충(Clash)까지 반영한 점수 계산
     def calculate_weighted_scores(self, pillars):
-        # pillars 순서: [연주, 월주, 일주, 시주] (각 2글자)
-        # 위치별 점수표 (요청하신 기준)
-        # 순서: [연간, 연지], [월간, 월지], [일간, 일지], [시간, 시지]
-        weights = [
-            [10, 7],   # 연주 (Stem, Branch)
+        # [연주, 월주, 일주, 시주]
+        base_weights = [
+            [10, 7],   # 연주 [천간, 지지]
             [17, 15],  # 월주
-            [50, 20],  # 일주 (일간 50점!)
+            [50, 20],  # 일주
             [10, 5]    # 시주
         ]
         
-        # 1. 일간의 오행 찾기 (기준점)
-        day_gan = pillars[2][0] 
+        day_gan = pillars[2][0] # 일간 (기준)
         my_element = self.gan_elements[day_gan]
         
         element_scores = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
-        total_strength_score = 0 # 신강/신약 판별용 점수 (플러스/마이너스 합산)
+        total_strength_score = 0
         
-        # 2. 8글자 전체 순회하며 점수 계산
-        for i, pillar in enumerate(pillars): # 연/월/일/시
-            for j, char in enumerate(pillar): # 간/지
-                weight = weights[i][j] # 해당 위치의 점수 (예: 일간이면 50)
+        # 로그 저장용 (충 발생 내역)
+        chung_logs = []
+
+        for i, pillar in enumerate(pillars):
+            for j, char in enumerate(pillar):
+                # 1. 기본 점수 가져오기
+                current_weight = base_weights[i][j]
                 
-                # 글자의 오행 찾기
+                # 2. ⚡ [충 체크] 천간(j=0)이고, 본인(일주 i=2)이 아닐 때
+                if j == 0 and i != 2:
+                    # 일간과 현재 글자가 충 관계인지 확인
+                    pair = frozenset([day_gan, char])
+                    if pair in self.chung_rules:
+                        penalty = self.chung_rules[pair]
+                        current_weight += penalty # 점수 가중치 증가 (더 많이 깎기 위해)
+                        chung_logs.append(f"{pillar}의 '{char}'와 일간 '{day_gan}'이 충(Clash)하여 점수 비중이 {penalty}점 증가했습니다.")
+
+                # 3. 오행 세력 계산 (절대값 누적)
                 if char in self.gan_elements:
                     elem = self.gan_elements[char]
                 else:
                     elem = self.ji_elements[char]
                 
-                # [그래프용] 오행 세력 점수 (절대값 누적) -> "어떤 오행이 가장 센가?"
-                element_scores[elem] += weight
+                element_scores[elem] += current_weight
 
-                # [신강/신약 판별용] 내 편(+), 남의 편(-) 계산
-                # 1. 나와 같은 오행 (비겁) -> 내 편 (+)
+                # 4. 신강/신약 점수 합산 (+/-)
+                # 충(Clash) 관계는 무조건 극(Geuk) 관계이므로 아래 로직에서 자연스럽게 (-) 처리됨
                 if elem == my_element:
-                    total_strength_score += weight
-                # 2. 나를 생해주는 오행 (인성) -> 내 편 (+)
+                    total_strength_score += current_weight # 비겁 (+)
                 elif self.saeng[elem] == my_element:
-                    total_strength_score += weight
-                # 3. 내가 생하는 오행 (식상) -> 힘빠짐 (-)
+                    total_strength_score += current_weight # 인성 (+)
                 elif self.saeng[my_element] == elem:
-                    total_strength_score -= weight
-                # 4. 내가 극하는 오행 (재성) -> 힘빠짐 (-)
+                    total_strength_score -= current_weight # 식상 (-)
                 elif self.geuk[my_element] == elem:
-                    total_strength_score -= weight
-                # 5. 나를 극하는 오행 (관성) -> 힘빠짐 (-)
+                    total_strength_score -= current_weight # 재성 (-)
                 elif self.geuk[elem] == my_element:
-                    total_strength_score -= weight
+                    total_strength_score -= current_weight # 관성 (-)
 
-        return element_scores, total_strength_score, my_element
+        return element_scores, total_strength_score, my_element, chung_logs
 
 # ---------------------------------------------------------
-# [기능] 차트 & 알림
+# [기능] 디스코드 전송 & 차트
 # ---------------------------------------------------------
 def send_discord_message(msg):
     try:
@@ -138,27 +149,23 @@ def send_discord_message(msg):
         requests.post(url, json=payload)
     except Exception: pass
 
-def draw_pretty_chart(scores, my_element):
+def draw_pretty_chart(scores, my_elem):
     df = pd.DataFrame(list(scores.items()), columns=["오행", "점수"])
-    
-    # 내 일간(기준)은 별도로 표시하거나 강조할 수 있음
     domain = ["목", "화", "토", "금", "수"]
     range_ = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
-    
     chart = alt.Chart(df).mark_bar(cornerRadius=10).encode(
         x=alt.X('오행', sort=None),
         y=alt.Y('점수', title='세력 점수'),
         color=alt.Color('오행', scale=alt.Scale(domain=domain, range=range_), legend=None),
         tooltip=['오행', '점수']
     ).properties(height=250).configure_axis(grid=False).configure_view(strokeWidth=0)
-    
     return chart
 
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
 st.title("🔮 익명 정밀 사주풀이")
-st.markdown("##### 사주 8글자의 위치별 세력을 정밀 분석합니다.")
+st.markdown("##### 합과 충(Clash)까지 고려한 초정밀 분석")
 
 calc = SajuCalculator()
 
@@ -194,49 +201,52 @@ with st.form("saju_form", clear_on_submit=False):
                 pillars = [year_pillar, month_pillar, day_pillar, time_pillar]
                 result_text = f"연주:{year_pillar} / 월주:**{month_pillar}** / 일주:**{day_pillar}** / 시주:{time_pillar}"
             else:
-                pillars = [year_pillar, month_pillar, day_pillar, ["??", "??"]] # 시간 제외
+                pillars = [year_pillar, month_pillar, day_pillar, ["??", "??"]]
                 result_text = f"연주:{year_pillar} / 월주:**{month_pillar}** / 일주:**{day_pillar}**"
 
-            # 2. 점수 계산 (여기가 핵심!)
-            # element_scores: 오행별 세력 크기 (그래프용)
-            # strength_score: 신강/신약 판별 점수 (+면 신강, -면 신약)
-            element_scores, strength_score, my_elem = calc.calculate_weighted_scores(pillars)
+            # 2. 충 반영 점수 계산
+            element_scores, strength_score, my_elem, chung_logs = calc.calculate_weighted_scores(pillars)
             
             my_interpretation = ilju_data.get(day_pillar, default_desc)
 
-            # 신강/신약 텍스트 판별
-            if strength_score > 20: power_desc = "매우 신강한 사주 (자존감과 주관이 아주 뚜렷함)"
-            elif strength_score > 0: power_desc = "약간 신강한 사주 (주도적인 성향)"
-            elif strength_score > -20: power_desc = "약간 신약한 사주 (주변과 조화를 중시)"
-            else: power_desc = "매우 신약한 사주 (섬세하고 환경에 민감)"
+            # 신강/신약 판별
+            if strength_score > 20: power_desc = "매우 신강 (주관 뚜렷)"
+            elif strength_score > 0: power_desc = "약간 신강 (주도적)"
+            elif strength_score > -20: power_desc = "약간 신약 (조화 중시)"
+            else: power_desc = "매우 신약 (환경 민감)"
+            
+            # 충 발생 여부 텍스트
+            chung_text = "\n".join(chung_logs) if chung_logs else "특이한 충(Clash) 없음"
 
             # 디스코드 전송
             final_contact = contact if contact else "블로그 게시 희망"
             msg = f"""
-**[🔮 정밀 점수 상담]**
+**[🔮 초정밀 상담 신청]**
 👤 {nickname} ({gender})
 🔖 {result_text}
-📊 신강/신약 점수: {strength_score} ({power_desc})
+📊 점수: {strength_score} ({power_desc})
+💥 충(Clash): {chung_text}
 📧 {final_contact}
 📜 **고민**: {concern}
 """
             send_discord_message(msg)
             
             # 결과 화면
-            st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}일주'** 입니다.")
-            st.info(f"사주 구성: {result_text}")
+            st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'** 입니다.")
+            
+            # 충 정보가 있으면 화면에 보여줌 (전문성 UP!)
+            if chung_logs:
+                st.warning(f"💥 **사주 내 충(Clash) 감지됨!**\n\n" + "\n".join([f"- {log}" for log in chung_logs]))
             
             st.markdown(f"""
             <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; margin-bottom:20px;">
-                <h4 style="color:#333;">📜 {day_pillar}일주 성향</h4>
+                <h4 style="color:#333;">📜 {day_pillar}일주 분석</h4>
                 <p>{my_interpretation}</p>
                 <hr>
-                <p><b>💡 에너지 분석:</b> {power_desc}</p>
-                <p style='font-size:12px; color:gray;'>* 일간(50점)과 주변 글자의 생극제화를 수치로 계산한 결과입니다.</p>
+                <p><b>💡 에너지 점수:</b> {strength_score}점 ({power_desc})</p>
             </div>
             """, unsafe_allow_html=True)
             
-            st.subheader(f"📊 {nickname}님의 오행 세력 그래프")
-            st.caption(f"본인(일간)인 '{my_elem}'을 포함하여, 사주 내에서 각 오행이 차지하는 힘의 크기입니다.")
+            st.subheader(f"📊 오행 세력 그래프")
             chart = draw_pretty_chart(element_scores, my_elem)
             st.altair_chart(chart, use_container_width=True)
