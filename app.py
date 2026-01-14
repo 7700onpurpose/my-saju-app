@@ -17,7 +17,7 @@ ilju_data = {
 default_desc = "아직 설명이 업데이트되지 않았습니다. 운영자가 직접 풀이해 드릴게요!"
 
 # ---------------------------------------------------------
-# [핵심] 사주팔자 계산기 (충 + 합 로직 탑재)
+# [핵심] 사주팔자 계산기 (충 + 합 + 삼합 로직)
 # ---------------------------------------------------------
 class SajuCalculator:
     def __init__(self):
@@ -37,15 +37,14 @@ class SajuCalculator:
         self.saeng = {"목": "화", "화": "토", "토": "금", "금": "수", "수": "목"}
         self.geuk = {"목": "토", "토": "수", "수": "화", "화": "금", "금": "목"}
 
-        # 1. 충(Clash) 규칙
+        # 1. 천간충(Clash) 규칙
         self.chung_rules = {
             frozenset(["갑", "경"]): 8, frozenset(["을", "신"]): 5,
             frozenset(["병", "임"]): 8, frozenset(["정", "계"]): 5,
             frozenset(["무", "갑"]): 3, frozenset(["기", "계"]): 3
         }
         
-        # 2. 합(Hap) 규칙 (사용자 정의 점수)
-        # 키: 두 글자 세트, 값: {오행: 변화량, ...}
+        # 2. 천간합(Hap) 규칙
         self.hap_rules = {
             frozenset(["갑", "기"]): {"토": 8, "목": -5},
             frozenset(["을", "경"]): {"금": 8, "목": -5},
@@ -54,10 +53,19 @@ class SajuCalculator:
             frozenset(["무", "계"]): {"화": 5, "토": 3, "수": -3}
         }
 
+        # 3. ⚡ [NEW] 지지 삼합(Sam-hap) 규칙
+        # (목국, 화국, 금국, 수국)
+        self.samhap_rules = {
+            "목": {"members": {"해", "묘", "미"}, "name": "해묘미(목국)"},
+            "화": {"members": {"인", "오", "술"}, "name": "인오술(화국)"},
+            "금": {"members": {"사", "유", "축"}, "name": "사유축(금국)"},
+            "수": {"members": {"신", "자", "진"}, "name": "신자진(수국)"}
+        }
+
     def get_60ganji(self, gan_idx, ji_idx):
         return self.gan[gan_idx % 10] + self.ji[ji_idx % 12]
 
-    # ... (연,월,일,시주 계산 함수들은 기존과 동일) ...
+    # ... (연,월,일,시주 계산 함수 동일) ...
     def get_year_pillar(self, year):
         idx = (year - 1984) % 60
         return self.get_60ganji(idx % 10, idx % 12)
@@ -90,7 +98,7 @@ class SajuCalculator:
         time_gan_idx = (start_gan_idx + time_idx) % 10
         return self.gan[time_gan_idx] + self.ji[time_idx]
 
-    # 🌟 [최종 업그레이드] 충 + 합 반영 점수 계산
+    # 🌟 [최종 업그레이드] 충 + 합 + 삼합 반영
     def calculate_weighted_scores(self, pillars):
         base_weights = [[10, 7], [17, 15], [50, 20], [10, 5]]
         
@@ -99,9 +107,9 @@ class SajuCalculator:
         
         element_scores = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
         total_strength_score = 0
-        logs = [] # 충/합 발생 기록
+        logs = [] 
 
-        # 1. 기본 점수 계산 & 신강신약 1차 판별
+        # 1. 기본 점수 계산
         for i, pillar in enumerate(pillars):
             for j, char in enumerate(pillar):
                 weight = base_weights[i][j]
@@ -109,58 +117,73 @@ class SajuCalculator:
                 
                 element_scores[elem] += weight
                 
-                # 신강/신약 계산
                 if elem == my_element: total_strength_score += weight
                 elif self.saeng[elem] == my_element: total_strength_score += weight
                 elif self.saeng[my_element] == elem: total_strength_score -= weight
                 elif self.geuk[my_element] == elem: total_strength_score -= weight
                 elif self.geuk[elem] == my_element: total_strength_score -= weight
 
-        # 2. ⚡ 충(Clash) 반영
+        # 2. ⚡ 천간충(Clash) 반영
         for i, pillar in enumerate(pillars):
-            if i != 2: # 일간 본인이 아닐 때
+            if i != 2:
                 char = pillar[0]
                 pair = frozenset([day_gan, char])
                 if pair in self.chung_rules:
                     penalty = self.chung_rules[pair]
                     element_scores[my_element] -= penalty
                     total_strength_score -= penalty
-                    logs.append(f"💥 '{char}'와 충(Clash)! 내 기운 -{penalty}")
+                    logs.append(f"💥 '{char}'와 충! 내 기운 -{penalty}")
 
-        # 3. 💖 합(Hap) 반영 (NEW!)
-        # 천간 4글자 추출
+        # 3. 💖 천간합(Hap) 반영
         stems = [p[0] for p in pillars if p[0] != "?"]
-        
-        # 정의된 합 규칙을 하나씩 체크
         for pair, changes in self.hap_rules.items():
-            # pair(두 글자)가 stems 리스트 안에 모두 들어있는지 확인
             if pair.issubset(set(stems)):
                 pair_str = "+".join(pair)
                 logs.append(f"💖 천간합({pair_str}) 성립!")
-                
                 for elem, score in changes.items():
-                    # (1) 오행 점수 수정
                     element_scores[elem] += score
                     
-                    # (2) 신강/신약 점수 재계산 (변화량에 따라)
-                    # 점수가 추가(Positive)된 경우
                     if score > 0:
-                        if elem == my_element or self.saeng[elem] == my_element:
-                            total_strength_score += score # 내 편이 늘어남 -> 신강해짐
-                        else:
-                            total_strength_score -= score # 적군이 늘어남 -> 신약해짐
-                    
-                    # 점수가 감소(Negative)된 경우
+                        if elem == my_element or self.saeng[elem] == my_element: total_strength_score += score
+                        else: total_strength_score -= score
                     else:
                         abs_score = abs(score)
-                        if elem == my_element or self.saeng[elem] == my_element:
-                            total_strength_score -= abs_score # 내 편이 줄어듦 -> 신약해짐
-                        else:
-                            total_strength_score += abs_score # 적군이 줄어듦 -> 신강해짐
+                        if elem == my_element or self.saeng[elem] == my_element: total_strength_score -= abs_score
+                        else: total_strength_score += abs_score
                     
-                    # 로그에 상세 내용 기록
                     sign = "+" if score > 0 else ""
                     logs.append(f"   -> {elem} {sign}{score}점")
+
+        # 4. 🌀 [NEW] 지지 삼합(Sam-hap) 반영
+        branches = [p[1] for p in pillars if p[1] != "?"] # 지지 4글자 추출
+        branches_set = set(branches) # 계산을 위해 집합으로 변환
+
+        for target_elem, rule in self.samhap_rules.items():
+            members = rule["members"]
+            # 교집합(일치하는 글자) 개수 확인
+            intersection = members.intersection(branches_set)
+            count = len(intersection)
+            
+            score_add = 0
+            if count == 3:
+                score_add = 10
+                logs.append(f"🌀 {rule['name']} 완전체 성립! (3글자)")
+            elif count == 2:
+                score_add = 6
+                # 어떤 글자들이 만났는지 표시
+                matched = ",".join(intersection)
+                logs.append(f"🌀 {rule['name']} 반합 성립! ({matched})")
+            
+            # 점수 반영 (추가만 있음)
+            if score_add > 0:
+                element_scores[target_elem] += score_add
+                logs.append(f"   -> {target_elem} 기운 +{score_add}점 급상승!")
+                
+                # 신강/신약 재계산
+                if target_elem == my_element or self.saeng[target_elem] == my_element:
+                    total_strength_score += score_add # 내 편이 강해짐
+                else:
+                    total_strength_score -= score_add # 남의 편이 강해짐
 
         return element_scores, total_strength_score, my_element, logs
 
@@ -180,7 +203,7 @@ def draw_pretty_chart(scores, my_elem):
     range_ = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
     chart = alt.Chart(df).mark_bar(cornerRadius=10).encode(
         x=alt.X('오행', sort=None),
-        y=alt.Y('점수', title='최종 세력 (충/합 반영)'),
+        y=alt.Y('점수', title='최종 세력 (충/합/삼합)'),
         color=alt.Color('오행', scale=alt.Scale(domain=domain, range=range_), legend=None),
         tooltip=['오행', '점수']
     ).properties(height=250).configure_axis(grid=False).configure_view(strokeWidth=0)
@@ -190,7 +213,7 @@ def draw_pretty_chart(scores, my_elem):
 # [화면 구성]
 # ---------------------------------------------------------
 st.title("🔮 익명 정밀 사주풀이")
-st.markdown("##### [충]과 [합]의 상호작용까지 계산하는 완성형 만세력")
+st.markdown("##### [삼합]의 강력한 에너지까지 계산합니다.")
 
 calc = SajuCalculator()
 
@@ -221,7 +244,7 @@ with st.form("saju_form", clear_on_submit=False):
                 pillars = [year_pillar, month_pillar, day_pillar, ["??", "??"]]
                 result_text = f"연주:{year_pillar} / 월주:**{month_pillar}** / 일주:**{day_pillar}**"
 
-            # 🌟 [계산] 충+합 반영
+            # 🌟 [계산] 충+합+삼합
             element_scores, strength_score, my_elem, logs = calc.calculate_weighted_scores(pillars)
             my_interpretation = ilju_data.get(day_pillar, default_desc)
 
@@ -234,11 +257,11 @@ with st.form("saju_form", clear_on_submit=False):
             final_contact = contact if contact else "블로그 게시 희망"
             
             msg = f"""
-**[🔮 최종 정밀 상담]**
+**[🔮 삼합 포함 정밀상담]**
 👤 {nickname} ({gender})
 🔖 {result_text}
 📊 점수: {strength_score} ({power_desc})
-📝 특이사항: {log_text}
+🌀 변화: {log_text}
 📧 {final_contact}
 📜 **고민**: {concern}
 """
@@ -246,9 +269,8 @@ with st.form("saju_form", clear_on_submit=False):
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'** 입니다.")
             
-            # 특이사항(충, 합) 보여주기
             if logs:
-                st.warning(f"💡 **사주 내 화학반응(충/합) 발견!**\n\n" + "\n".join([f"- {log}" for log in logs]))
+                st.warning(f"🌀 **사주 내 화학반응(충/합/삼합) 발견!**\n\n" + "\n".join([f"- {log}" for log in logs]))
             
             st.markdown(f"""
             <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; margin-bottom:20px;">
@@ -256,7 +278,6 @@ with st.form("saju_form", clear_on_submit=False):
                 <p>{my_interpretation}</p>
                 <hr>
                 <p><b>💡 최종 에너지 점수:</b> {strength_score}점 ({power_desc})</p>
-                <p style='font-size:12px; color:gray;'>* 충(Clash)과 합(Hap)으로 인한 오행의 증감까지 모두 반영된 수치입니다.</p>
             </div>
             """, unsafe_allow_html=True)
             
