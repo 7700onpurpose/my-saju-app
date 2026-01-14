@@ -12,7 +12,7 @@ st.set_page_config(page_title="익명 철학원", page_icon="🔮")
 ilju_data = {
     "갑자": "큰 나무가 차가운 물 위에 떠 있는 형상. 지혜롭고 인정이 많으나 고독할 수 있음.",
     "을축": "언 땅에 핀 꽃. 끈기가 강하고 생활력이 좋으나 속마음을 잘 드러내지 않음.",
-    "신사": "용광로 속의 보석. 예리하고 섬세하지만, 속으로는 뜨거운 열정(혹은 스트레스)을 품고 있음.", # 님을 위한 특별 추가!
+    "신사": "용광로 속의 보석. 예리하고 섬세하지만, 속으로는 뜨거운 열정(혹은 스트레스)을 품고 있음.",
     # ... 필요한 만큼 채우세요 ...
 }
 default_desc = "아직 설명이 업데이트되지 않았습니다. 운영자가 직접 풀이해 드릴게요!"
@@ -38,7 +38,6 @@ class SajuCalculator:
         self.saeng = {"목": "화", "화": "토", "토": "금", "금": "수", "수": "목"}
         self.geuk = {"목": "토", "토": "수", "수": "화", "화": "금", "금": "목"}
 
-        # 충/합 규칙들
         self.chung_rules = {
             frozenset(["갑", "경"]): 8, frozenset(["을", "신"]): 5,
             frozenset(["병", "임"]): 8, frozenset(["정", "계"]): 5,
@@ -92,16 +91,8 @@ class SajuCalculator:
         start_gan_idx = (day_gan_idx % 5) * 2
         return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
 
-    # 🌟 [최종 수정] 기본 점수 하향 + Top 2 대결
     def calculate_weighted_scores(self, pillars):
-        # 1. 일간 점수 대폭 하향 조정 (50 -> 20)
-        # 님처럼 화가 강한데 금(일간)이 그래프에서 이기는 현상을 막기 위함
-        base_weights = [
-            [10, 7],   # 연주
-            [17, 15],  # 월주
-            [20, 20],  # 일주 (일간 20, 일지 20) -> 이제 공평해짐!
-            [10, 5]    # 시주
-        ]
+        base_weights = [[10, 7], [17, 15], [20, 20], [10, 5]]
         
         day_gan = pillars[2][0] 
         my_element = self.gan_elements[day_gan]
@@ -111,23 +102,21 @@ class SajuCalculator:
         total_strength_score = 0
         logs = [] 
 
-        # --- [Step 1] 기본 점수 계산 ---
+        # Step 1: 기본 점수
         for i, pillar in enumerate(pillars):
             for j, char in enumerate(pillar):
                 weight = base_weights[i][j]
                 elem = self.gan_elements.get(char, self.ji_elements.get(char))
-                
                 element_scores[elem] += weight
                 if j == 1: jiji_scores[elem] += weight
-
-                # 신강/신약 (점수 누적)
+                
                 if elem == my_element: total_strength_score += weight
                 elif self.saeng[elem] == my_element: total_strength_score += weight
                 elif self.saeng[my_element] == elem: total_strength_score -= weight
                 elif self.geuk[my_element] == elem: total_strength_score -= weight
                 elif self.geuk[elem] == my_element: total_strength_score -= weight
 
-        # --- [Step 2] 천간충 ---
+        # Step 2: 천간충
         for i, pillar in enumerate(pillars):
             if i != 2:
                 pair = frozenset([day_gan, pillar[0]])
@@ -137,19 +126,18 @@ class SajuCalculator:
                     total_strength_score -= penalty
                     logs.append(f"💥 천간충('{pillar[0]}')! 내 기운 -{penalty}")
 
-        # --- [Step 3] 천간합 ---
+        # Step 3: 천간합
         stems = [p[0] for p in pillars if p[0] != "?"]
         for pair, changes in self.hap_rules.items():
             if pair.issubset(set(stems)):
                 for elem, score in changes.items():
                     element_scores[elem] += score
-                    # (신강신약 반영 생략 - 코드 길이상 핵심만)
                     if score > 0:
                         if elem == my_element or self.saeng[elem] == my_element: total_strength_score += score
                         else: total_strength_score -= score
                 logs.append(f"💖 천간합({'+'.join(pair)}) 성립!")
 
-        # --- [Step 4] 지지충 ---
+        # Step 4: 지지충
         branches = [p[1] for p in pillars if p[1] != "?"]
         branches_set = set(branches)
         for rule_set, e1, e2, sc in self.jiji_chung_rules:
@@ -158,13 +146,12 @@ class SajuCalculator:
                 element_scores[w] += sc
                 element_scores[l] -= sc
                 logs.append(f"⚔️ 지지충 승자:{w}(+{sc})")
-                
                 if w == my_element or self.saeng[w] == my_element: total_strength_score += sc
                 else: total_strength_score -= sc
                 if l == my_element or self.saeng[l] == my_element: total_strength_score -= sc
                 else: total_strength_score += sc
 
-        # --- [Step 5] 삼합/방합 ---
+        # Step 5: 삼합/방합
         for rules in [self.samhap_rules, self.banghap_rules]:
             for target, rule in rules.items():
                 cnt = len(rule["members"].intersection(branches_set))
@@ -175,7 +162,7 @@ class SajuCalculator:
                     if target == my_element or self.saeng[target] == my_element: total_strength_score += add
                     else: total_strength_score -= add
 
-        # --- [Step 6] 병존 ---
+        # Step 6: 병존
         for seq in [stems, branches]:
             for k in range(len(seq)-1):
                 if seq[k] == seq[k+1] and seq[k] != "?":
@@ -185,49 +172,34 @@ class SajuCalculator:
                     if elem == my_element or self.saeng[elem] == my_element: total_strength_score += 10
                     else: total_strength_score -= 10
 
-        # ----------------------------------------------------
-        # 7. ⚡ [NEW] 상위 2개 세력 대결 (Top 2 Battle)
-        # ----------------------------------------------------
-        # 점수 기준으로 정렬
+        # Step 7: Top 2 Battle
         sorted_scores = sorted(element_scores.items(), key=lambda x: x[1], reverse=True)
-        top1_elem, top1_score = sorted_scores[0]
-        top2_elem, top2_score = sorted_scores[1]
-        
-        # 1등과 2등의 점수 차이가 크지 않을 때(예: 30점 차이 이내) 서로 영향을 준다고 가정
-        # (압도적인 1등이면 싸움도 안 되니까)
+        top1_elem = sorted_scores[0][0]
+        top2_elem = sorted_scores[1][0]
         battle_log = ""
         bonus = 10
         
-        # Case A: 1등이 2등을 극(Control)하는 경우 -> 1등 승리 굳히기
         if self.geuk[top1_elem] == top2_elem:
             element_scores[top1_elem] += bonus
             element_scores[top2_elem] -= bonus
-            battle_log = f"1위({top1_elem})가 2위({top2_elem})를 제압하여 격차 벌어짐 (+{bonus})"
-            
-        # Case B: 2등이 1등을 극(Control)하는 경우 -> 2등의 하극상 (중요! 님 케이스)
+            battle_log = f"1위({top1_elem})가 2위({top2_elem})를 제압하여 격차 벌어짐"
         elif self.geuk[top2_elem] == top1_elem:
-            # 2등(화)이 1등(금)을 녹임 -> 2등 점수 대폭 상승, 1등 점수 하락
             element_scores[top2_elem] += bonus
             element_scores[top1_elem] -= bonus
-            battle_log = f"2위({top2_elem})가 1위({top1_elem})를 맹렬히 공격! (순위 변동 가능성)"
-            
-            # 신강신약 반영 (내가 공격받으면 약해짐)
+            battle_log = f"2위({top2_elem})가 1위({top1_elem})를 맹렬히 공격! (하극상)"
             if top1_elem == my_element: total_strength_score -= bonus
             if top2_elem == my_element: total_strength_score += bonus
-
-        # Case C: 1등이 2등을 생(Generate) -> 힘이 빠짐 (아낌없이 주는 나무)
         elif self.saeng[top1_elem] == top2_elem:
-            element_scores[top1_elem] -= 5 # 낳아주느라 힘 빠짐
-            element_scores[top2_elem] += 10 # 받아먹어서 힘 생김
+            element_scores[top1_elem] -= 5
+            element_scores[top2_elem] += 10
             battle_log = f"1위({top1_elem})가 2위({top2_elem})를 생하여 기운 설기됨"
 
-        if battle_log:
-            logs.append(f"🏆 **세력전쟁:** {battle_log}")
+        if battle_log: logs.append(f"🏆 **세력전쟁:** {battle_log}")
 
         return element_scores, total_strength_score, my_element, logs
 
 # ---------------------------------------------------------
-# [기능] 차트 & 전송
+# [기능] 차트 (도넛 + 퍼센트)
 # ---------------------------------------------------------
 def send_discord_message(msg):
     try:
@@ -236,23 +208,49 @@ def send_discord_message(msg):
         requests.post(url, json=payload)
     except Exception: pass
 
-def draw_pretty_chart(scores, my_elem):
-    df = pd.DataFrame(list(scores.items()), columns=["오행", "점수"])
+def draw_pie_chart(scores):
+    # 1. 데이터 프레임 변환 (음수 제거)
+    data = []
+    for elem, score in scores.items():
+        safe_score = max(0, score) # 음수는 0으로 처리 (세력 소멸)
+        data.append({"오행": elem, "점수": safe_score})
+    
+    df = pd.DataFrame(data)
+    
+    # 2. 비율 계산
+    total = df["점수"].sum()
+    if total == 0: total = 1
+    df["비율"] = df["점수"] / total
+    
+    # 3. 차트 생성
     domain = ["목", "화", "토", "금", "수"]
     range_ = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
-    chart = alt.Chart(df).mark_bar(cornerRadius=10).encode(
-        x=alt.X('오행', sort=None),
-        y=alt.Y('점수', title='최종 세력'),
-        color=alt.Color('오행', scale=alt.Scale(domain=domain, range=range_), legend=None),
-        tooltip=['오행', '점수']
-    ).properties(height=250).configure_axis(grid=False).configure_view(strokeWidth=0)
-    return chart
+    
+    base = alt.Chart(df).encode(
+        theta=alt.Theta("점수", stack=True)
+    )
+    
+    pie = base.mark_arc(innerRadius=60, outerRadius=120).encode(
+        color=alt.Color("오행", scale=alt.Scale(domain=domain, range=range_), legend=alt.Legend(title="오행 (범례)")),
+        order=alt.Order("점수", sort="descending"),
+        tooltip=["오행", "점수", alt.Tooltip("비율", format=".1%")]
+    )
+    
+    text = base.mark_text(radius=140).encode(
+        text=alt.Text("비율", format=".1%"),
+        order=alt.Order("점수", sort="descending"),
+        color=alt.value("black")
+    ).filter(
+        alt.datum.비율 > 0.05 # 5% 이하 숨김
+    )
+    
+    return pie + text
 
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
 st.title("🔮 익명 정밀 사주풀이")
-st.markdown("##### 세력 간의 [생극제화]까지 반영된 최종 버전")
+st.markdown("##### 세력 분포를 [퍼센트]로 확인하는 완성형 버전")
 
 calc = SajuCalculator()
 
@@ -296,7 +294,7 @@ with st.form("saju_form", clear_on_submit=False):
             final_contact = contact if contact else "블로그 게시 희망"
             
             msg = f"""
-**[🔮 최종 완성형 상담]**
+**[🔮 퍼센트 분석 상담]**
 👤 {nickname} ({gender})
 🔖 {result_text}
 📊 점수: {strength_score} ({power_desc})
@@ -317,10 +315,9 @@ with st.form("saju_form", clear_on_submit=False):
                 <p>{my_interpretation}</p>
                 <hr>
                 <p><b>💡 최종 에너지 점수:</b> {strength_score}점 ({power_desc})</p>
-                <p style='font-size:12px; color:gray;'>* 가장 강한 두 세력 간의 생극제화(Top 2 Battle)가 반영된 결과입니다.</p>
             </div>
             """, unsafe_allow_html=True)
             
-            st.subheader(f"📊 오행 세력 그래프")
-            chart = draw_pretty_chart(element_scores, my_elem)
+            st.subheader(f"📊 오행 세력 분포 (퍼센트)")
+            chart = draw_pie_chart(element_scores)
             st.altair_chart(chart, use_container_width=True)
