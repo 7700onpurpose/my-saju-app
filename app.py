@@ -67,7 +67,7 @@ with st.form("saju_form", clear_on_submit=False): # 결과 보여주려고 False
         birth_time = st.time_input("태어난 시간")
     
     concern = st.text_area("고민 내용", height=150, placeholder="가장 궁금한 점을 적어주세요.")
-    contact = st.text_input("답변 받을 이메일 (선택)", placeholder="입력 시 메일로 답변, 미입력 시 블로그 게시")
+    contact = st.text_input("답변 받을 이메일", placeholder="정확하게 적어주세요.")
     
     submitted = st.form_submit_button("상담 신청 및 내 사주 확인하기")
 
@@ -110,3 +110,4 @@ with st.form("saju_form", clear_on_submit=False): # 결과 보여주려고 False
             st.bar_chart(df.set_index("오행"))
             
             st.info("더 깊은 내용은 운영자가 직접 풀이해서 알려드릴게요! 조금만 기다려주세요. 🍀")
+
