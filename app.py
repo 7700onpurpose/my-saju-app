@@ -17,7 +17,7 @@ ilju_data = {
 default_desc = "아직 설명이 업데이트되지 않았습니다. 운영자가 직접 풀이해 드릴게요!"
 
 # ---------------------------------------------------------
-# [핵심] 사주팔자 계산 & 점수 로직 (충 반영)
+# [핵심] 사주팔자 계산 & 점수 로직 (내 점수 깎기)
 # ---------------------------------------------------------
 class SajuCalculator:
     def __init__(self):
@@ -37,15 +37,14 @@ class SajuCalculator:
         self.saeng = {"목": "화", "화": "토", "토": "금", "금": "수", "수": "목"}
         self.geuk = {"목": "토", "토": "수", "수": "화", "화": "금", "금": "목"}
 
-        # ⚡ [추가됨] 천간충 리스트와 패널티 점수
-        # 쌍방향 체크를 위해 세트로 저장
+        # 충 패널티 점수 (깎일 점수)
         self.chung_rules = {
-            frozenset(["갑", "경"]): 8,  # 갑경충
-            frozenset(["을", "신"]): 5,  # 을신충
-            frozenset(["병", "임"]): 8,  # 병임충
-            frozenset(["정", "계"]): 5,  # 정계충
-            frozenset(["무", "갑"]): 3,  # 무갑충 (목극토)
-            frozenset(["기", "계"]): 3   # 기계충 (토극수)
+            frozenset(["갑", "경"]): 8,
+            frozenset(["을", "신"]): 5,
+            frozenset(["병", "임"]): 8,
+            frozenset(["정", "계"]): 5,
+            frozenset(["무", "갑"]): 3,
+            frozenset(["기", "계"]): 3
         }
 
     def get_60ganji(self, gan_idx, ji_idx):
@@ -83,64 +82,66 @@ class SajuCalculator:
         time_gan_idx = (start_gan_idx + time_idx) % 10
         return self.gan[time_gan_idx] + self.ji[time_idx]
 
-    # 🌟 [업그레이드] 충(Clash)까지 반영한 점수 계산
+    # 🌟 [수정됨] 충 발생 시 내 점수 차감 로직
     def calculate_weighted_scores(self, pillars):
-        # [연주, 월주, 일주, 시주]
         base_weights = [
-            [10, 7],   # 연주 [천간, 지지]
-            [17, 15],  # 월주
-            [50, 20],  # 일주
-            [10, 5]    # 시주
+            [10, 7],   # 연
+            [17, 15],  # 월
+            [50, 20],  # 일 (일간 50)
+            [10, 5]    # 시
         ]
         
-        day_gan = pillars[2][0] # 일간 (기준)
+        day_gan = pillars[2][0] 
         my_element = self.gan_elements[day_gan]
         
         element_scores = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
         total_strength_score = 0
-        
-        # 로그 저장용 (충 발생 내역)
         chung_logs = []
 
+        # 1. 기본 점수 계산 (일단 다 더함)
         for i, pillar in enumerate(pillars):
             for j, char in enumerate(pillar):
-                # 1. 기본 점수 가져오기
-                current_weight = base_weights[i][j]
+                weight = base_weights[i][j]
                 
-                # 2. ⚡ [충 체크] 천간(j=0)이고, 본인(일주 i=2)이 아닐 때
-                if j == 0 and i != 2:
-                    # 일간과 현재 글자가 충 관계인지 확인
-                    pair = frozenset([day_gan, char])
-                    if pair in self.chung_rules:
-                        penalty = self.chung_rules[pair]
-                        current_weight += penalty # 점수 가중치 증가 (더 많이 깎기 위해)
-                        chung_logs.append(f"{pillar}의 '{char}'와 일간 '{day_gan}'이 충(Clash)하여 점수 비중이 {penalty}점 증가했습니다.")
-
-                # 3. 오행 세력 계산 (절대값 누적)
                 if char in self.gan_elements:
                     elem = self.gan_elements[char]
                 else:
                     elem = self.ji_elements[char]
                 
-                element_scores[elem] += current_weight
+                element_scores[elem] += weight
 
-                # 4. 신강/신약 점수 합산 (+/-)
-                # 충(Clash) 관계는 무조건 극(Geuk) 관계이므로 아래 로직에서 자연스럽게 (-) 처리됨
+                # 신강/신약 판별
                 if elem == my_element:
-                    total_strength_score += current_weight # 비겁 (+)
+                    total_strength_score += weight
                 elif self.saeng[elem] == my_element:
-                    total_strength_score += current_weight # 인성 (+)
+                    total_strength_score += weight
                 elif self.saeng[my_element] == elem:
-                    total_strength_score -= current_weight # 식상 (-)
+                    total_strength_score -= weight
                 elif self.geuk[my_element] == elem:
-                    total_strength_score -= current_weight # 재성 (-)
+                    total_strength_score -= weight
                 elif self.geuk[elem] == my_element:
-                    total_strength_score -= current_weight # 관성 (-)
+                    total_strength_score -= weight
+
+        # 2. ⚡ 충(Clash) 체크 및 내 점수 깎기 (후처리)
+        for i, pillar in enumerate(pillars):
+            # 천간(j=0)이고, 본인(i=2)이 아닌 글자만 체크
+            if i != 2: 
+                char = pillar[0] # 비교할 천간 글자
+                pair = frozenset([day_gan, char])
+                
+                if pair in self.chung_rules:
+                    penalty = self.chung_rules[pair]
+                    
+                    # 💥 [핵심] 일간(나)의 오행 점수를 깎음!
+                    element_scores[my_element] -= penalty
+                    total_strength_score -= penalty # 신강 점수도 깎임
+                    
+                    chung_logs.append(f"💥 '{char}'와 충(Clash)하여 일간({day_gan})의 기운이 {penalty}점 소실되었습니다.")
 
         return element_scores, total_strength_score, my_element, chung_logs
 
 # ---------------------------------------------------------
-# [기능] 디스코드 전송 & 차트
+# [기능] 디스코드 & 차트
 # ---------------------------------------------------------
 def send_discord_message(msg):
     try:
@@ -153,9 +154,10 @@ def draw_pretty_chart(scores, my_elem):
     df = pd.DataFrame(list(scores.items()), columns=["오행", "점수"])
     domain = ["목", "화", "토", "금", "수"]
     range_ = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
+    
     chart = alt.Chart(df).mark_bar(cornerRadius=10).encode(
         x=alt.X('오행', sort=None),
-        y=alt.Y('점수', title='세력 점수'),
+        y=alt.Y('점수', title='세력 점수 (충 반영)'),
         color=alt.Color('오행', scale=alt.Scale(domain=domain, range=range_), legend=None),
         tooltip=['오행', '점수']
     ).properties(height=250).configure_axis(grid=False).configure_view(strokeWidth=0)
@@ -191,7 +193,6 @@ with st.form("saju_form", clear_on_submit=False):
         elif not nickname:
             st.error("닉네임을 적어주세요!")
         else:
-            # 1. 사주 계산
             year_pillar = calc.get_year_pillar(birth_date.year)
             month_pillar = calc.get_month_pillar(year_pillar, birth_date)
             day_pillar = calc.get_day_pillar(datetime.combine(birth_date, birth_time))
@@ -204,39 +205,33 @@ with st.form("saju_form", clear_on_submit=False):
                 pillars = [year_pillar, month_pillar, day_pillar, ["??", "??"]]
                 result_text = f"연주:{year_pillar} / 월주:**{month_pillar}** / 일주:**{day_pillar}**"
 
-            # 2. 충 반영 점수 계산
+            # 점수 계산
             element_scores, strength_score, my_elem, chung_logs = calc.calculate_weighted_scores(pillars)
-            
             my_interpretation = ilju_data.get(day_pillar, default_desc)
 
-            # 신강/신약 판별
             if strength_score > 20: power_desc = "매우 신강 (주관 뚜렷)"
             elif strength_score > 0: power_desc = "약간 신강 (주도적)"
             elif strength_score > -20: power_desc = "약간 신약 (조화 중시)"
             else: power_desc = "매우 신약 (환경 민감)"
             
-            # 충 발생 여부 텍스트
             chung_text = "\n".join(chung_logs) if chung_logs else "특이한 충(Clash) 없음"
 
-            # 디스코드 전송
             final_contact = contact if contact else "블로그 게시 희망"
             msg = f"""
-**[🔮 초정밀 상담 신청]**
+**[🔮 정밀 상담]**
 👤 {nickname} ({gender})
 🔖 {result_text}
 📊 점수: {strength_score} ({power_desc})
-💥 충(Clash): {chung_text}
+💥 충: {chung_text}
 📧 {final_contact}
 📜 **고민**: {concern}
 """
             send_discord_message(msg)
             
-            # 결과 화면
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'** 입니다.")
             
-            # 충 정보가 있으면 화면에 보여줌 (전문성 UP!)
             if chung_logs:
-                st.warning(f"💥 **사주 내 충(Clash) 감지됨!**\n\n" + "\n".join([f"- {log}" for log in chung_logs]))
+                st.warning(f"💥 **충(Clash)으로 인한 기운 손실 감지!**\n\n" + "\n".join([f"- {log}" for log in chung_logs]))
             
             st.markdown(f"""
             <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; margin-bottom:20px;">
@@ -244,6 +239,7 @@ with st.form("saju_form", clear_on_submit=False):
                 <p>{my_interpretation}</p>
                 <hr>
                 <p><b>💡 에너지 점수:</b> {strength_score}점 ({power_desc})</p>
+                <p style='font-size:12px; color:gray;'>* 충(Clash)이 발생하면 일간의 에너지가 소모되어 점수가 차감됩니다.</p>
             </div>
             """, unsafe_allow_html=True)
             
