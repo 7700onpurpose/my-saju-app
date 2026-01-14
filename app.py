@@ -248,7 +248,7 @@ def draw_pie_chart(scores):
         text="라벨", # 위에서 만든 라벨 컬럼 사용
         order=alt.Order("점수", sort="descending"),
         color=alt.value("black"),
-        size=alt.value(16) # 글자 크기 키움 (16px)
+        size=alt.value(25) # 글자 크기 키움 (16px)
     ).transform_filter(
         alt.datum.비율 > 0.03 # 3% 미만은 숨김 (겹침 방지)
     )
@@ -339,3 +339,4 @@ with st.form("saju_form", clear_on_submit=False):
             st.subheader(f"📊 오행 세력 분포 (퍼센트)")
             chart = draw_pie_chart(element_scores)
             st.altair_chart(chart, use_container_width=True)
+
