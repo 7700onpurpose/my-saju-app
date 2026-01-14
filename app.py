@@ -17,7 +17,7 @@ ilju_data = {
 default_desc = "아직 설명이 업데이트되지 않았습니다. 운영자가 직접 풀이해 드릴게요!"
 
 # ---------------------------------------------------------
-# [핵심] 사주팔자 계산기 (천간합충 + 지지합충)
+# [핵심] 사주팔자 계산기 (병존 로직 추가됨)
 # ---------------------------------------------------------
 class SajuCalculator:
     def __init__(self):
@@ -53,12 +53,11 @@ class SajuCalculator:
             frozenset(["무", "계"]): {"화": 5, "토": 3, "수": -3}
         }
 
-        # 3. ⚡ [NEW] 지지충 (승패 판정용)
-        # (글자세트, 오행1, 오행2, 점수)
+        # 3. 지지충 (승패 판정용)
         self.jiji_chung_rules = [
-            ({"자", "오"}, "수", "화", 7), # 자오충
-            ({"묘", "유"}, "목", "금", 5), # 묘유충
-            ({"사", "해"}, "화", "수", 8)  # 사해충 (사=화, 해=수)
+            ({"자", "오"}, "수", "화", 7),
+            ({"묘", "유"}, "목", "금", 5),
+            ({"사", "해"}, "화", "수", 8)
         ]
 
         # 4. 지지 삼합
@@ -113,7 +112,7 @@ class SajuCalculator:
         time_gan_idx = (start_gan_idx + time_idx) % 10
         return self.gan[time_gan_idx] + self.ji[time_idx]
 
-    # 🌟 [최종 업그레이드] 지지충 승자독식 로직 반영
+    # 🌟 [최종 업그레이드] 병존(Adjacency) 로직 추가
     def calculate_weighted_scores(self, pillars):
         base_weights = [[10, 7], [17, 15], [50, 20], [10, 5]]
         
@@ -121,27 +120,19 @@ class SajuCalculator:
         my_element = self.gan_elements[day_gan]
         
         element_scores = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
-        
-        # 지지 세력 판독용 (승패 결정 위해 지지 점수만 따로 저장)
         jiji_scores = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
-        
         total_strength_score = 0
         logs = [] 
 
-        # 1. 기본 점수 계산 (전체 & 지지별)
+        # 1. 기본 점수 계산
         for i, pillar in enumerate(pillars):
             for j, char in enumerate(pillar):
                 weight = base_weights[i][j]
                 elem = self.gan_elements.get(char, self.ji_elements.get(char))
                 
-                # 전체 점수
                 element_scores[elem] += weight
-                
-                # 지지 점수만 따로 집계 (j=1이 지지)
-                if j == 1:
-                    jiji_scores[elem] += weight
+                if j == 1: jiji_scores[elem] += weight
 
-                # 신강/신약
                 if elem == my_element: total_strength_score += weight
                 elif self.saeng[elem] == my_element: total_strength_score += weight
                 elif self.saeng[my_element] == elem: total_strength_score -= weight
@@ -177,48 +168,30 @@ class SajuCalculator:
                     sign = "+" if score > 0 else ""
                     logs.append(f"   -> {elem} {sign}{score}")
 
-        # 4. ⚡ [NEW] 지지충 (Jiji Clash - 승자독식)
+        # 4. 지지충 (승자독식)
         branches = [p[1] for p in pillars if p[1] != "?"]
         branches_set = set(branches)
         
         for rule_set, elem1, elem2, score in self.jiji_chung_rules:
-            # 해당 충 글자들이 모두 지지에 있는지 확인
             if rule_set.issubset(branches_set):
-                # 지지 점수만 비교 (승자 판별)
                 score1 = jiji_scores[elem1]
                 score2 = jiji_scores[elem2]
+                winner, loser = (elem1, elem2) if score1 >= score2 else (elem2, elem1)
                 
-                winner = None
-                loser = None
-                
-                if score1 >= score2: # elem1 승리 (동점이면 일단 앞 순서 승리로 간주)
-                    winner, loser = elem1, elem2
-                else: # elem2 승리
-                    winner, loser = elem2, elem1
-                
-                # 점수 반영 (메인 점수에 반영)
                 element_scores[winner] += score
                 element_scores[loser] -= score
+                logs.append(f"⚔️ 지지충({','.join(rule_set)})! 승자:{winner}(+{score}), 패자:{loser}(-{score})")
                 
-                logs.append(f"⚔️ 지지충({','.join(rule_set)}) 발생! 승자:{winner}(+{score}), 패자:{loser}(-{score})")
-                
-                # 신강/신약 재계산 (승자 점수 추가)
                 if winner == my_element or self.saeng[winner] == my_element: total_strength_score += score
                 else: total_strength_score -= score
-                
-                # 신강/신약 재계산 (패자 점수 차감)
-                if loser == my_element or self.saeng[loser] == my_element: total_strength_score -= score # 내 편이 짐
-                else: total_strength_score += score # 적군이 짐 (나한텐 이득)
+                if loser == my_element or self.saeng[loser] == my_element: total_strength_score -= score
+                else: total_strength_score += score
 
-        # 5. 지지 삼합 & 방합
+        # 5. 지지 삼합/방합
         for target_elem, rule in self.samhap_rules.items():
             members = rule["members"]
-            intersection = members.intersection(branches_set)
-            count = len(intersection)
-            score_add = 0
-            if count == 3: score_add = 10
-            elif count == 2: score_add = 6
-            
+            count = len(members.intersection(branches_set))
+            score_add = 10 if count == 3 else (6 if count == 2 else 0)
             if score_add > 0:
                 element_scores[target_elem] += score_add
                 logs.append(f"🌀 {rule['name']} +{score_add}")
@@ -227,17 +200,41 @@ class SajuCalculator:
 
         for target_elem, rule in self.banghap_rules.items():
             members = rule["members"]
-            intersection = members.intersection(branches_set)
-            count = len(intersection)
-            score_add = 0
-            if count == 3: score_add = 10
-            elif count == 2: score_add = 6
-            
+            count = len(members.intersection(branches_set))
+            score_add = 10 if count == 3 else (6 if count == 2 else 0)
             if score_add > 0:
                 element_scores[target_elem] += score_add
                 logs.append(f"🏯 {rule['name']} +{score_add}")
                 if target_elem == my_element or self.saeng[target_elem] == my_element: total_strength_score += score_add
                 else: total_strength_score -= score_add
+
+        # 6. ⚡ [NEW] 병존(Adjacency) 로직 (같은 글자 나란히)
+        # 천간(stems)와 지지(branches) 각각 검사
+        check_lists = [("천간", stems), ("지지", branches)]
+        
+        for name, seq in check_lists:
+            # 리스트 순회 (마지막 인덱스 전까지)
+            for k in range(len(seq) - 1):
+                char1 = seq[k]
+                char2 = seq[k+1]
+                
+                # '?'(시간 모름)이면 계산 중단
+                if char1 == "?" or char2 == "?":
+                    break
+                
+                # 병존 발생 시
+                if char1 == char2:
+                    elem = self.gan_elements.get(char1, self.ji_elements.get(char1))
+                    bonus = 10
+                    
+                    element_scores[elem] += bonus
+                    logs.append(f"👯 {name} 병존({char1}-{char2})! {elem} +{bonus}점")
+                    
+                    # 신강/신약 반영
+                    if elem == my_element or self.saeng[elem] == my_element:
+                        total_strength_score += bonus # 내 편이 뭉침 (강해짐)
+                    else:
+                        total_strength_score -= bonus # 적군이 뭉침 (약해짐)
 
         return element_scores, total_strength_score, my_element, logs
 
@@ -267,7 +264,7 @@ def draw_pretty_chart(scores, my_elem):
 # [화면 구성]
 # ---------------------------------------------------------
 st.title("🔮 익명 정밀 사주풀이")
-st.markdown("##### [지지충]의 승패 판정까지 포함된 완전체 분석")
+st.markdown("##### [병존(Parallel)]까지 계산하는 마스터 만세력")
 
 calc = SajuCalculator()
 
@@ -324,7 +321,7 @@ with st.form("saju_form", clear_on_submit=False):
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'** 입니다.")
             
             if logs:
-                st.warning(f"⚔️ **사주 내 충돌과 연합(합/충) 상세 내역**\n\n" + "\n".join([f"- {log}" for log in logs]))
+                st.warning(f"⚔️ **사주 내 화학반응(충/합/병존) 발견!**\n\n" + "\n".join([f"- {log}" for log in logs]))
             
             st.markdown(f"""
             <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; margin-bottom:20px;">
@@ -332,7 +329,6 @@ with st.form("saju_form", clear_on_submit=False):
                 <p>{my_interpretation}</p>
                 <hr>
                 <p><b>💡 최종 에너지 점수:</b> {strength_score}점 ({power_desc})</p>
-                <p style='font-size:12px; color:gray;'>* 지지충이 발생하면 세력이 강한 쪽이 약한 쪽의 점수를 흡수하거나 파괴합니다.</p>
             </div>
             """, unsafe_allow_html=True)
             
