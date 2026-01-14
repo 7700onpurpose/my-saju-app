@@ -116,7 +116,7 @@ class SajuCalculator:
                 elif self.geuk[my_element] == elem: total_strength_score -= weight
                 elif self.geuk[elem] == my_element: total_strength_score -= weight
 
-        # Step 2: 천간충
+        # Step 2: 천간충 (표시 변경: 갑 💥 경)
         for i, pillar in enumerate(pillars):
             if i != 2:
                 pair = frozenset([day_gan, pillar[0]])
@@ -124,9 +124,10 @@ class SajuCalculator:
                     penalty = self.chung_rules[pair]
                     element_scores[my_element] -= penalty
                     total_strength_score -= penalty
-                    logs.append(f"💥 천간충('{pillar[0]}')! 내 기운 -{penalty}")
+                    # 📝 [수정] 대립 구도 명시
+                    logs.append(f"💥 천간충 ({day_gan} 💥 {pillar[0]})! 내 기운 -{penalty}")
 
-        # Step 3: 천간합
+        # Step 3: 천간합 (표시 변경: 갑 ❤️ 기)
         stems = [p[0] for p in pillars if p[0] != "?"]
         for pair, changes in self.hap_rules.items():
             if pair.issubset(set(stems)):
@@ -135,9 +136,10 @@ class SajuCalculator:
                     if score > 0:
                         if elem == my_element or self.saeng[elem] == my_element: total_strength_score += score
                         else: total_strength_score -= score
-                logs.append(f"💖 천간합({'+'.join(pair)}) 성립!")
+                # 📝 [수정] 합 구도 명시
+                logs.append(f"💖 천간합 ({' ❤️ '.join(pair)}) 성립!")
 
-        # Step 4: 지지충
+        # Step 4: 지지충 (표시 변경: 자 💥 오)
         branches = [p[1] for p in pillars if p[1] != "?"]
         branches_set = set(branches)
         for rule_set, e1, e2, sc in self.jiji_chung_rules:
@@ -145,11 +147,15 @@ class SajuCalculator:
                 w, l = (e1, e2) if jiji_scores[e1] >= jiji_scores[e2] else (e2, e1)
                 element_scores[w] += sc
                 element_scores[l] -= sc
-                logs.append(f"⚔️ 지지충 승자:{w}(+{sc})")
+                
                 if w == my_element or self.saeng[w] == my_element: total_strength_score += sc
                 else: total_strength_score -= sc
                 if l == my_element or self.saeng[l] == my_element: total_strength_score -= sc
                 else: total_strength_score += sc
+                
+                # 📝 [수정] 대립 구도 명시 (set을 list로 변환하여 출력)
+                conflict_str = f"{list(rule_set)[0]} 💥 {list(rule_set)[1]}"
+                logs.append(f"⚔️ 지지충 ({conflict_str})! 승자:{w}(+{sc})")
 
         # Step 5: 삼합/방합
         for rules in [self.samhap_rules, self.banghap_rules]:
@@ -158,17 +164,22 @@ class SajuCalculator:
                 add = 10 if cnt == 3 else (6 if cnt == 2 else 0)
                 if add > 0:
                     element_scores[target] += add
-                    logs.append(f"🌀 {rule['name']} +{add}")
+                    # 📝 [수정] 어떤 글자들이 모였는지 표시
+                    matched = ",".join(rule["members"].intersection(branches_set))
+                    logs.append(f"🌀 {rule['name']} ({matched}) +{add}")
+                    
                     if target == my_element or self.saeng[target] == my_element: total_strength_score += add
                     else: total_strength_score -= add
 
-        # Step 6: 병존
+        # Step 6: 병존 (표시 변경: 갑 🤝 갑)
         for seq in [stems, branches]:
             for k in range(len(seq)-1):
                 if seq[k] == seq[k+1] and seq[k] != "?":
                     elem = self.gan_elements.get(seq[k], self.ji_elements.get(seq[k]))
                     element_scores[elem] += 10
-                    logs.append(f"👯 병존({seq[k]}{seq[k]}) +10")
+                    # 📝 [수정] 병존 명시
+                    logs.append(f"👯 병존 ({seq[k]} 🤝 {seq[k]}) +10")
+                    
                     if elem == my_element or self.saeng[elem] == my_element: total_strength_score += 10
                     else: total_strength_score -= 10
 
@@ -209,9 +220,7 @@ def send_discord_message(msg):
     except Exception: pass
 
 def draw_pie_chart(scores):
-    # 1. 데이터 프레임 변환
     data = []
-    # 오행별 이모지 매핑
     emoji_map = {"목": "🌲", "화": "🔥", "토": "⛰️", "금": "⚔️", "수": "🌊"}
     
     for elem, score in scores.items():
@@ -220,16 +229,12 @@ def draw_pie_chart(scores):
     
     df = pd.DataFrame(data)
     
-    # 2. 비율 계산
     total = df["점수"].sum()
     if total == 0: total = 1
     df["비율"] = df["점수"] / total
     
-    # 3. 라벨 생성 (이모지 + 퍼센트)
-    # 예: 🔥 45.2%
     df["라벨"] = df["이모지"] + " " + (df["비율"] * 100).round(1).astype(str) + "%"
     
-    # 4. 차트 생성
     domain = ["목", "화", "토", "금", "수"]
     range_ = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
     
@@ -243,14 +248,13 @@ def draw_pie_chart(scores):
         tooltip=["오행", "점수", alt.Tooltip("비율", format=".1%")]
     )
     
-    # 텍스트 라벨 (크게, 이모지 포함)
     text = base.mark_text(radius=145).encode(
-        text="라벨", # 위에서 만든 라벨 컬럼 사용
+        text="라벨", 
         order=alt.Order("점수", sort="descending"),
         color=alt.value("black"),
-        size=alt.value(25) # 글자 크기 키움 (16px)
+        size=alt.value(25) 
     ).transform_filter(
-        alt.datum.비율 > 0.03 # 3% 미만은 숨김 (겹침 방지)
+        alt.datum.비율 > 0.03 
     )
     
     return pie + text
@@ -260,7 +264,6 @@ def draw_pie_chart(scores):
 # ---------------------------------------------------------
 st.title("🔮 온라인 사주풀이 철학원")
 
-# 1) 소개글 줄바꿈 & 폰트 조절 적용
 st.markdown("""
 <div style="font-size:15px; color:#555; line-height:1.6;">
 익명 보장 온라인 철학원입니다.<br>
@@ -339,5 +342,3 @@ with st.form("saju_form", clear_on_submit=False):
             st.subheader(f"📊 오행 세력 분포 (퍼센트)")
             chart = draw_pie_chart(element_scores)
             st.altair_chart(chart, use_container_width=True)
-
-
