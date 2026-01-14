@@ -15,7 +15,7 @@ ilju_data = {
     "신사": "용광로 속의 보석. 예리하고 섬세하지만, 속으로는 뜨거운 열정(혹은 스트레스)을 품고 있음.",
     # ... 필요한 만큼 채우세요 ...
 }
-default_desc = "아직 설명이 업데이트되지 않았습니다. 운영자가 직접 풀이해 드릴게요!"
+default_desc = "아직 설명이 업데이트되지 않았습니다. 업데이트를 기다려 주세요."
 
 # ---------------------------------------------------------
 # [핵심] 사주팔자 계산기
@@ -250,8 +250,8 @@ def draw_pie_chart(scores):
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
-st.title("🔮 익명 정밀 사주풀이")
-st.markdown("##### 세력 분포를 [퍼센트]로 확인하는 완성형 버전")
+st.title("🔮 온라인 사주풀이 철학원")
+st.markdown("##### 익명 보장 온라인 철학원입니다. 사주팔자를 면밀히 분석하여 정확하게 분석합니다.")
 
 calc = SajuCalculator()
 
@@ -263,7 +263,7 @@ with st.form("saju_form", clear_on_submit=False):
     with col2: birth_time = st.time_input("태어난 시간")
     is_unknown_time = st.checkbox("태어난 시간을 몰라요")
     concern = st.text_area("고민 내용", height=150)
-    contact = st.text_input("이메일 (선택)", placeholder="답변 받을 연락처")
+    contact = st.text_input("특별한 고민이 있다면 이메일을 적어주세요.", placeholder="답변 받을 연락처")
     submitted = st.form_submit_button("최종 정밀 분석 보기")
 
     if submitted:
@@ -286,13 +286,13 @@ with st.form("saju_form", clear_on_submit=False):
             element_scores, strength_score, my_elem, logs = calc.calculate_weighted_scores(pillars)
             my_interpretation = ilju_data.get(day_pillar, default_desc)
 
-            if strength_score > 20: power_desc = "매우 신강 (주관 뚜렷)"
-            elif strength_score > 0: power_desc = "약간 신강 (주도적)"
-            elif strength_score > -20: power_desc = "약간 신약 (조화 중시)"
-            else: power_desc = "매우 신약 (환경 민감)"
+            if strength_score > 20: power_desc = "극신강"
+            elif strength_score > 0: power_desc = "신강"
+            elif strength_score > -20: power_desc = "신약"
+            else: power_desc = "극신약"
             
             log_text = "\n".join(logs) if logs else "특이사항 없음"
-            final_contact = contact if contact else "블로그 게시 희망"
+            final_contact = contact if contact else " "
             
             msg = f"""
 **[🔮 퍼센트 분석 상담]**
@@ -305,7 +305,7 @@ with st.form("saju_form", clear_on_submit=False):
 """
             send_discord_message(msg)
             
-            st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'** 입니다.")
+            st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
             if logs:
                 st.warning(f"🏆 **오행 세력 전쟁 리포트**\n\n" + "\n".join([f"- {log}" for log in logs]))
@@ -322,3 +322,4 @@ with st.form("saju_form", clear_on_submit=False):
             st.subheader(f"📊 오행 세력 분포 (퍼센트)")
             chart = draw_pie_chart(element_scores)
             st.altair_chart(chart, use_container_width=True)
+
