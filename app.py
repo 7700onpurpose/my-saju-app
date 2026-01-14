@@ -251,7 +251,7 @@ def draw_pie_chart(scores):
 # [화면 구성]
 # ---------------------------------------------------------
 st.title("🔮 온라인 사주풀이 철학원")
-st.markdown("##### 익명 보장 온라인 철학원입니다. 사주팔자를 면밀히 분석하여 정확하게 분석합니다.")
+st.markdown("##### 익명 보장 온라인 철학원입니다. 사주팔자를 면밀히 분석하여 정확하게 분석합니다. 특별한 고민이 있다면 위안을 얻어보세요.")
 
 calc = SajuCalculator()
 
@@ -262,8 +262,8 @@ with st.form("saju_form", clear_on_submit=False):
     with col1: birth_date = st.date_input("생년월일", min_value=datetime(1950, 1, 1))
     with col2: birth_time = st.time_input("태어난 시간")
     is_unknown_time = st.checkbox("태어난 시간을 몰라요")
-    concern = st.text_area("고민 내용", height=150)
-    contact = st.text_input("특별한 고민이 있다면 이메일을 적어주세요.", placeholder="답변 받을 연락처")
+    concern = st.text_area("고민이 있다면 적어주세요. 사주를 바탕으로 한 답변을 드립니다. ", height=150)
+    contact = st.text_input("고민에 대한 상세한 답변을 받아보실 이메일을 적어주세요.", placeholder="답변 받을 이메일")
     submitted = st.form_submit_button("최종 정밀 분석 보기")
 
     if submitted:
@@ -322,4 +322,5 @@ with st.form("saju_form", clear_on_submit=False):
             st.subheader(f"📊 오행 세력 분포 (퍼센트)")
             chart = draw_pie_chart(element_scores)
             st.altair_chart(chart, use_container_width=True)
+
 
