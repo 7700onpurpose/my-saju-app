@@ -199,7 +199,7 @@ class SajuCalculator:
         return element_scores, total_strength_score, my_element, logs
 
 # ---------------------------------------------------------
-# [기능] 차트 (오류 수정됨: transform_filter 사용)
+# [기능] 차트 (이모지+큰숫자 라벨 적용)
 # ---------------------------------------------------------
 def send_discord_message(msg):
     try:
@@ -211,9 +211,12 @@ def send_discord_message(msg):
 def draw_pie_chart(scores):
     # 1. 데이터 프레임 변환
     data = []
+    # 오행별 이모지 매핑
+    emoji_map = {"목": "🌲", "화": "🔥", "토": "⛰️", "금": "⚔️", "수": "🌊"}
+    
     for elem, score in scores.items():
         safe_score = max(0, score)
-        data.append({"오행": elem, "점수": safe_score})
+        data.append({"오행": elem, "점수": safe_score, "이모지": emoji_map[elem]})
     
     df = pd.DataFrame(data)
     
@@ -222,7 +225,11 @@ def draw_pie_chart(scores):
     if total == 0: total = 1
     df["비율"] = df["점수"] / total
     
-    # 3. 차트 생성
+    # 3. 라벨 생성 (이모지 + 퍼센트)
+    # 예: 🔥 45.2%
+    df["라벨"] = df["이모지"] + " " + (df["비율"] * 100).round(1).astype(str) + "%"
+    
+    # 4. 차트 생성
     domain = ["목", "화", "토", "금", "수"]
     range_ = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
     
@@ -236,13 +243,14 @@ def draw_pie_chart(scores):
         tooltip=["오행", "점수", alt.Tooltip("비율", format=".1%")]
     )
     
-    # 🚨 [수정된 부분] .filter() 대신 .transform_filter() 사용
-    text = base.mark_text(radius=140).encode(
-        text=alt.Text("비율", format=".1%"),
+    # 텍스트 라벨 (크게, 이모지 포함)
+    text = base.mark_text(radius=145).encode(
+        text="라벨", # 위에서 만든 라벨 컬럼 사용
         order=alt.Order("점수", sort="descending"),
-        color=alt.value("black")
+        color=alt.value("black"),
+        size=alt.value(16) # 글자 크기 키움 (16px)
     ).transform_filter(
-        alt.datum.비율 > 0.05
+        alt.datum.비율 > 0.03 # 3% 미만은 숨김 (겹침 방지)
     )
     
     return pie + text
@@ -251,7 +259,16 @@ def draw_pie_chart(scores):
 # [화면 구성]
 # ---------------------------------------------------------
 st.title("🔮 온라인 사주풀이 철학원")
-st.markdown("##### 익명 보장 온라인 철학원입니다. 사주팔자를 면밀히 분석하여 정확하게 분석합니다. 특별한 고민이 있다면 위안을 얻어보세요.")
+
+# 1) 소개글 줄바꿈 & 폰트 조절 적용
+st.markdown("""
+<div style="font-size:15px; color:#555; line-height:1.6;">
+익명 보장 온라인 철학원입니다.<br>
+사주팔자를 면밀히 분석하여 정확하게 풀이합니다.<br>
+특별한 고민이 있다면 위안을 얻어보세요.
+</div>
+<br>
+""", unsafe_allow_html=True)
 
 calc = SajuCalculator()
 
@@ -322,5 +339,3 @@ with st.form("saju_form", clear_on_submit=False):
             st.subheader(f"📊 오행 세력 분포 (퍼센트)")
             chart = draw_pie_chart(element_scores)
             st.altair_chart(chart, use_container_width=True)
-
-
