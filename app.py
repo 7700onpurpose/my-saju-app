@@ -19,7 +19,7 @@ st.title("🔮 익명 온라인 철학원")
 # 안내문구 (여기를 잘 적어야 합니다!)
 st.markdown("""
 **생년월일시와 고민을 남겨주시면 명리학으로 풀이해 드립니다.**
-1. **이메일**을 남기시면 메일로 답장을 보내드립니다. ✉️
+**이메일**을 남기시면 메일로 답장을 보내드립니다. ✉️
 """)
 # (위 [운영자 블로그...] 부분에 님 블로그 주소를 적어두면 더 좋아요!)
 
@@ -39,7 +39,7 @@ with st.form("saju_form", clear_on_submit=True):
     concern = st.text_area("고민 내용", height=150, placeholder="현재 상황과 가장 궁금한 점을 적어주세요.")
     
     # 📢 [추가됨] 연락받을 곳
-    contact = st.text_input("답변 받을 이메일 (선택사항)", placeholder="입력하지 않으면 블로그에 답변이 게시됩니다.")
+    contact = st.text_input("답변 받을 이메일", placeholder="정확하게 입력해 주세요.")
     
     submitted = st.form_submit_button("상담 신청하기")
 
@@ -66,4 +66,5 @@ with st.form("saju_form", clear_on_submit=True):
 """
             send_discord_message(message)
             st.success(f"접수 완료! {nickname}님, 곧 답변 드릴게요. 🍀")
+
 
