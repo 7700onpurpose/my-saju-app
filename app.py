@@ -297,4 +297,30 @@ with st.form("saju_form", clear_on_submit=False):
             
             msg = f"""
 **[🔮 최종 완성형 상담]**
-👤 {nickname
+👤 {nickname} ({gender})
+🔖 {result_text}
+📊 점수: {strength_score} ({power_desc})
+🏆 세력전: {log_text}
+📧 {final_contact}
+📜 **고민**: {concern}
+"""
+            send_discord_message(msg)
+            
+            st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'** 입니다.")
+            
+            if logs:
+                st.warning(f"🏆 **오행 세력 전쟁 리포트**\n\n" + "\n".join([f"- {log}" for log in logs]))
+            
+            st.markdown(f"""
+            <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; margin-bottom:20px;">
+                <h4 style="color:#333;">📜 {day_pillar}일주 분석</h4>
+                <p>{my_interpretation}</p>
+                <hr>
+                <p><b>💡 최종 에너지 점수:</b> {strength_score}점 ({power_desc})</p>
+                <p style='font-size:12px; color:gray;'>* 가장 강한 두 세력 간의 생극제화(Top 2 Battle)가 반영된 결과입니다.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.subheader(f"📊 오행 세력 그래프")
+            chart = draw_pretty_chart(element_scores, my_elem)
+            st.altair_chart(chart, use_container_width=True)
