@@ -177,4 +177,211 @@ class SajuCalculator:
         for seq in [stems, branches]:
             for k in range(len(seq)-1):
                 if seq[k] == seq[k+1] and seq[k] != "?":
-                    elem = self.gan_elements.get(seq[k], self.ji_elements
+                    elem = self.gan_elements.get(seq[k], self.ji_elements.get(seq[k]))
+                    element_scores[elem] += 10
+                    logs.append(f"👯 병존 ({seq[k]} 🤝 {seq[k]}) +10")
+                    
+                    if elem == my_element or self.saeng[elem] == my_element: total_strength_score += 10
+                    else: total_strength_score -= 10
+
+        # Step 7: Top 2 Battle
+        sorted_scores = sorted(element_scores.items(), key=lambda x: x[1], reverse=True)
+        top1_elem = sorted_scores[0][0]
+        top2_elem = sorted_scores[1][0]
+        battle_log = ""
+        bonus = 10
+        
+        if self.geuk[top1_elem] == top2_elem:
+            element_scores[top1_elem] += bonus
+            element_scores[top2_elem] -= bonus
+            battle_log = f"1위({top1_elem})가 2위({top2_elem})를 제압하여 격차 벌어짐"
+        elif self.geuk[top2_elem] == top1_elem:
+            element_scores[top2_elem] += bonus
+            element_scores[top1_elem] -= bonus
+            battle_log = f"2위({top2_elem})가 1위({top1_elem})를 맹렬히 공격! (하극상)"
+            if top1_elem == my_element: total_strength_score -= bonus
+            if top2_elem == my_element: total_strength_score += bonus
+        elif self.saeng[top1_elem] == top2_elem:
+            element_scores[top1_elem] -= 5
+            element_scores[top2_elem] += 10
+            battle_log = f"1위({top1_elem})가 2위({top2_elem})를 생하여 기운 설기됨"
+
+        if battle_log: logs.append(f"🏆 **세력전쟁:** {battle_log}")
+
+        return element_scores, total_strength_score, my_element, logs
+    
+    # 십성 변환 함수
+    def convert_to_sibseong(self, my_element, element_scores):
+        sibseong_scores = {
+            "비겁(나/형제)": element_scores[my_element],
+            "식상(표현/재능)": element_scores[self.saeng[my_element]],
+            "재성(재물/결과)": element_scores[self.geuk[my_element]],
+            "인성(지혜/후원)": 0,
+            "관성(명예/직장)": 0
+        }
+        
+        for key, value in self.saeng.items():
+            if value == my_element:
+                sibseong_scores["인성(지혜/후원)"] = element_scores[key]
+                break
+                
+        for key, value in self.geuk.items():
+            if value == my_element:
+                sibseong_scores["관성(명예/직장)"] = element_scores[key]
+                break
+                
+        return sibseong_scores
+
+# ---------------------------------------------------------
+# [기능] 차트
+# ---------------------------------------------------------
+def send_discord_message(msg):
+    try:
+        url = st.secrets["discord_url"]
+        payload = {"content": msg}
+        requests.post(url, json=payload)
+    except Exception: pass
+
+def draw_pie_chart(scores, chart_type="ohaeng"):
+    data = []
+    
+    if chart_type == "ohaeng":
+        emoji_map = {"목": "🌲", "화": "🔥", "토": "⛰️", "금": "⚔️", "수": "🌊"}
+        color_range = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
+        domain = ["목", "화", "토", "금", "수"]
+    else: # sibseong
+        emoji_map = {
+            "비겁(나/형제)": "🤝", "식상(표현/재능)": "🎨", 
+            "재성(재물/결과)": "💰", "관성(명예/직장)": "👑", "인성(지혜/후원)": "📚"
+        }
+        color_range = ["#4CAF50", "#FF5722", "#FFC107", "#9E9E9E", "#3F51B5"]
+        domain = ["비겁(나/형제)", "식상(표현/재능)", "재성(재물/결과)", "관성(명예/직장)", "인성(지혜/후원)"]
+
+    for elem, score in scores.items():
+        safe_score = max(0, score)
+        emoji = emoji_map.get(elem, "")
+        data.append({"구분": elem, "점수": safe_score, "이모지": emoji})
+    
+    df = pd.DataFrame(data)
+    
+    total = df["점수"].sum()
+    if total == 0: total = 1
+    df["비율"] = df["점수"] / total
+    
+    df["라벨"] = df["이모지"] + " " + (df["비율"] * 100).round(1).astype(str) + "%"
+    
+    base = alt.Chart(df).encode(
+        theta=alt.Theta("점수", stack=True)
+    )
+    
+    pie = base.mark_arc(innerRadius=55, outerRadius=110).encode(
+        color=alt.Color("구분", scale=alt.Scale(domain=domain, range=color_range), legend=alt.Legend(title="구분")),
+        order=alt.Order("점수", sort="descending"),
+        tooltip=["구분", "점수", alt.Tooltip("비율", format=".1%")]
+    )
+    
+    text = base.mark_text(radius=135).encode(
+        text="라벨", 
+        order=alt.Order("점수", sort="descending"),
+        color=alt.value("black"),
+        size=alt.value(18)
+    ).transform_filter(
+        alt.datum.비율 > 0.03 
+    )
+    
+    return pie + text
+
+# ---------------------------------------------------------
+# [화면 구성]
+# ---------------------------------------------------------
+st.title("🔮 온라인 사주풀이 철학원")
+
+st.markdown("""
+<div style="font-size:15px; color:#555; line-height:1.6;">
+익명 보장 온라인 철학원입니다.<br>
+사주팔자를 면밀히 분석하여 정확하게 풀이합니다.<br>
+특별한 고민이 있다면 위안을 얻어보세요.
+</div>
+<br>
+""", unsafe_allow_html=True)
+
+calc = SajuCalculator()
+
+with st.form("saju_form", clear_on_submit=False):
+    nickname = st.text_input("닉네임", placeholder="예: 북극이")
+    gender = st.radio("성별", ["여성", "남성"], horizontal=True)
+    col1, col2 = st.columns(2)
+    with col1: birth_date = st.date_input("생년월일", min_value=datetime(1950, 1, 1))
+    with col2: birth_time = st.time_input("태어난 시간")
+    is_unknown_time = st.checkbox("태어난 시간을 몰라요")
+    concern = st.text_area("고민이 있다면 적어주세요 (선택).", height=150)
+    contact = st.text_input("고민에 대한 상세한 답변을 받아보실 이메일을 적어주세요 (선택).", placeholder="답변 받을 이메일")
+    submitted = st.form_submit_button("내 사주 분석 결과 보기")
+
+    if submitted:
+        if not nickname: st.error("닉네임을 적어주세요!")
+        else:
+            year_pillar = calc.get_year_pillar(birth_date.year)
+            month_pillar = calc.get_month_pillar(year_pillar, birth_date)
+            day_pillar = calc.get_day_pillar(datetime.combine(birth_date, birth_time))
+            
+            if not is_unknown_time:
+                time_pillar = calc.get_time_pillar(day_pillar, birth_time.hour)
+                pillars = [year_pillar, month_pillar, day_pillar, time_pillar]
+                result_text = f"연주:{year_pillar} / 월주:**{month_pillar}** / 일주:**{day_pillar}** / 시주:{time_pillar}"
+            else:
+                pillars = [year_pillar, month_pillar, day_pillar, ["??", "??"]]
+                result_text = f"연주:{year_pillar} / 월주:**{month_pillar}** / 일주:**{day_pillar}**"
+
+            element_scores, strength_score, my_elem, logs = calc.calculate_weighted_scores(pillars)
+            sibseong_scores = calc.convert_to_sibseong(my_elem, element_scores)
+            
+            my_interpretation = ilju_data.get(day_pillar, default_desc)
+
+            if strength_score > 20: power_desc = "극신강"
+            elif strength_score > 0: power_desc = "신강"
+            elif strength_score > -20: power_desc = "신약"
+            else: power_desc = "극신약"
+            
+            log_text = "\n".join(logs) if logs else "특이사항 없음"
+            final_contact = contact if contact else "입력 안 함"
+            final_concern = concern if concern else "입력 안 함"
+            
+            msg = f"""
+**[🔮 퍼센트 분석 상담]**
+👤 {nickname} ({gender})
+🔖 {result_text}
+📊 점수: {strength_score} ({power_desc})
+🏆 세력전: {log_text}
+📧 {final_contact}
+📜 **고민**: {final_concern}
+"""
+            send_discord_message(msg)
+            
+            st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
+            
+            if logs:
+                st.warning(f"🏆 **오행 세력 전쟁 리포트**\n\n" + "\n".join([f"- {log}" for log in logs]))
+            
+            st.markdown(f"""
+            <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; margin-bottom:20px;">
+                <h4 style="color:#333;">📜 {day_pillar}일주 분석</h4>
+                <p>{my_interpretation}</p>
+                <hr>
+                <p><b>💡 최종 에너지 점수:</b> {strength_score}점 ({power_desc})</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.subheader("📊 사주 세력 분포 (오행 & 십성)")
+            
+            col_chart1, col_chart2 = st.columns(2)
+            
+            with col_chart1:
+                st.caption("🌲 오행 분포 (기질)")
+                chart1 = draw_pie_chart(element_scores, chart_type="ohaeng")
+                st.altair_chart(chart1, use_container_width=True)
+                
+            with col_chart2:
+                st.caption("🤝 십성 분포 (사회성)")
+                chart2 = draw_pie_chart(sibseong_scores, chart_type="sibseong")
+                st.altair_chart(chart2, use_container_width=True)
