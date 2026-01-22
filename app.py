@@ -67,7 +67,10 @@ class SajuCalculator:
         }
 
     def get_60ganji(self, gan_idx, ji_idx): return self.gan[gan_idx % 10] + self.ji[ji_idx % 12]
-    def get_year_pillar(self, year): return self.get_60ganji((year - 1984) % 60 % 10, (year - 1984) % 60 % 12)
+    
+    def get_year_pillar(self, year): 
+        return self.get_60ganji((year - 1984) % 60 % 10, (year - 1984) % 60 % 12)
+        
     def get_month_pillar(self, year_pillar, date_obj):
         year_gan = year_pillar[0]
         month = date_obj.month
@@ -81,12 +84,97 @@ class SajuCalculator:
         start_gan_idx = (year_gan_idx % 5) * 2 + 2
         month_gan_idx = (start_gan_idx + saju_month_idx) % 10
         return self.gan[month_gan_idx] + month_ji_char
+
     def get_day_pillar(self, date_obj):
         days_diff = (date_obj - datetime(1900, 1, 1)).days
         return self.get_60ganji((10 + days_diff) % 60 % 10, (10 + days_diff) % 60 % 12)
+
     def get_time_pillar(self, day_pillar, hour):
         day_gan = day_pillar[0]
         time_idx = (hour + 1) // 2 % 12
         day_gan_idx = self.gan.index(day_gan)
         start_gan_idx = (day_gan_idx % 5) * 2
-        return self.gan[(start_gan_idx + time_
+        # 여기가 수정되었습니다!
+        return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
+
+    def calculate_weighted_scores(self, pillars):
+        base_weights = [[10, 7], [17, 15], [20, 20], [10, 5]]
+        
+        day_gan = pillars[2][0] 
+        my_element = self.gan_elements[day_gan]
+        
+        element_scores = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
+        jiji_scores = {"목": 0, "화": 0, "토": 0, "금": 0, "수": 0}
+        total_strength_score = 0
+        logs = [] 
+
+        # Step 1: 기본 점수
+        for i, pillar in enumerate(pillars):
+            for j, char in enumerate(pillar):
+                weight = base_weights[i][j]
+                elem = self.gan_elements.get(char, self.ji_elements.get(char))
+                element_scores[elem] += weight
+                if j == 1: jiji_scores[elem] += weight
+                
+                if elem == my_element: total_strength_score += weight
+                elif self.saeng[elem] == my_element: total_strength_score += weight
+                elif self.saeng[my_element] == elem: total_strength_score -= weight
+                elif self.geuk[my_element] == elem: total_strength_score -= weight
+                elif self.geuk[elem] == my_element: total_strength_score -= weight
+
+        # Step 2: 천간충
+        for i, pillar in enumerate(pillars):
+            if i != 2:
+                pair = frozenset([day_gan, pillar[0]])
+                if pair in self.chung_rules:
+                    penalty = self.chung_rules[pair]
+                    element_scores[my_element] -= penalty
+                    total_strength_score -= penalty
+                    logs.append(f"💥 천간충 ({day_gan} 💥 {pillar[0]})! 내 기운 -{penalty}")
+
+        # Step 3: 천간합
+        stems = [p[0] for p in pillars if p[0] != "?"]
+        for pair, changes in self.hap_rules.items():
+            if pair.issubset(set(stems)):
+                for elem, score in changes.items():
+                    element_scores[elem] += score
+                    if score > 0:
+                        if elem == my_element or self.saeng[elem] == my_element: total_strength_score += score
+                        else: total_strength_score -= score
+                logs.append(f"💖 천간합 ({' ❤️ '.join(pair)}) 성립!")
+
+        # Step 4: 지지충
+        branches = [p[1] for p in pillars if p[1] != "?"]
+        branches_set = set(branches)
+        for rule_set, e1, e2, sc in self.jiji_chung_rules:
+            if rule_set.issubset(branches_set):
+                w, l = (e1, e2) if jiji_scores[e1] >= jiji_scores[e2] else (e2, e1)
+                element_scores[w] += sc
+                element_scores[l] -= sc
+                
+                if w == my_element or self.saeng[w] == my_element: total_strength_score += sc
+                else: total_strength_score -= sc
+                if l == my_element or self.saeng[l] == my_element: total_strength_score -= sc
+                else: total_strength_score += sc
+                
+                conflict_str = f"{list(rule_set)[0]} 💥 {list(rule_set)[1]}"
+                logs.append(f"⚔️ 지지충 ({conflict_str})! 승자:{w}(+{sc})")
+
+        # Step 5: 삼합/방합
+        for rules in [self.samhap_rules, self.banghap_rules]:
+            for target, rule in rules.items():
+                cnt = len(rule["members"].intersection(branches_set))
+                add = 10 if cnt == 3 else (6 if cnt == 2 else 0)
+                if add > 0:
+                    element_scores[target] += add
+                    matched = ",".join(rule["members"].intersection(branches_set))
+                    logs.append(f"🌀 {rule['name']} ({matched}) +{add}")
+                    
+                    if target == my_element or self.saeng[target] == my_element: total_strength_score += add
+                    else: total_strength_score -= add
+
+        # Step 6: 병존
+        for seq in [stems, branches]:
+            for k in range(len(seq)-1):
+                if seq[k] == seq[k+1] and seq[k] != "?":
+                    elem = self.gan_elements.get(seq[k], self.ji_elements
