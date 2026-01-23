@@ -94,7 +94,6 @@ class SajuCalculator:
         time_idx = (hour + 1) // 2 % 12
         day_gan_idx = self.gan.index(day_gan)
         start_gan_idx = (day_gan_idx % 5) * 2
-        # 여기가 수정되었습니다!
         return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
 
     def calculate_weighted_scores(self, pillars):
@@ -213,27 +212,27 @@ class SajuCalculator:
     # 십성 변환 함수
     def convert_to_sibseong(self, my_element, element_scores):
         sibseong_scores = {
-            "비겁(나/형제)": element_scores[my_element],
-            "식상(표현/재능)": element_scores[self.saeng[my_element]],
-            "재성(재물/결과)": element_scores[self.geuk[my_element]],
-            "인성(지혜/후원)": 0,
-            "관성(명예/직장)": 0
+            "비겁 (나/동료)": element_scores[my_element],
+            "식상 (표현/재능)": element_scores[self.saeng[my_element]],
+            "재성 (재물/결과)": element_scores[self.geuk[my_element]],
+            "인성 (지혜/도움)": 0,
+            "관성 (명예/직장)": 0
         }
         
         for key, value in self.saeng.items():
             if value == my_element:
-                sibseong_scores["인성(지혜/후원)"] = element_scores[key]
+                sibseong_scores["인성 (지혜/도움)"] = element_scores[key]
                 break
                 
         for key, value in self.geuk.items():
             if value == my_element:
-                sibseong_scores["관성(명예/직장)"] = element_scores[key]
+                sibseong_scores["관성 (명예/직장)"] = element_scores[key]
                 break
                 
         return sibseong_scores
 
 # ---------------------------------------------------------
-# [기능] 차트
+# [기능] 차트 & 메시지
 # ---------------------------------------------------------
 def send_discord_message(msg):
     try:
@@ -242,20 +241,11 @@ def send_discord_message(msg):
         requests.post(url, json=payload)
     except Exception: pass
 
-def draw_pie_chart(scores, chart_type="ohaeng"):
+def draw_ohaeng_pie_chart(scores):
     data = []
-    
-    if chart_type == "ohaeng":
-        emoji_map = {"목": "🌲", "화": "🔥", "토": "⛰️", "금": "⚔️", "수": "🌊"}
-        color_range = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
-        domain = ["목", "화", "토", "금", "수"]
-    else: # sibseong
-        emoji_map = {
-            "비겁(나/형제)": "🤝", "식상(표현/재능)": "🎨", 
-            "재성(재물/결과)": "💰", "관성(명예/직장)": "👑", "인성(지혜/후원)": "📚"
-        }
-        color_range = ["#4CAF50", "#FF5722", "#FFC107", "#9E9E9E", "#3F51B5"]
-        domain = ["비겁(나/형제)", "식상(표현/재능)", "재성(재물/결과)", "관성(명예/직장)", "인성(지혜/후원)"]
+    emoji_map = {"목": "🌲", "화": "🔥", "토": "⛰️", "금": "⚔️", "수": "🌊"}
+    color_range = ["#66BB6A", "#EF5350", "#FFCA28", "#BDBDBD", "#42A5F5"]
+    domain = ["목", "화", "토", "금", "수"]
 
     for elem, score in scores.items():
         safe_score = max(0, score)
@@ -263,19 +253,15 @@ def draw_pie_chart(scores, chart_type="ohaeng"):
         data.append({"구분": elem, "점수": safe_score, "이모지": emoji})
     
     df = pd.DataFrame(data)
-    
     total = df["점수"].sum()
     if total == 0: total = 1
     df["비율"] = df["점수"] / total
-    
     df["라벨"] = df["이모지"] + " " + (df["비율"] * 100).round(1).astype(str) + "%"
     
-    base = alt.Chart(df).encode(
-        theta=alt.Theta("점수", stack=True)
-    )
+    base = alt.Chart(df).encode(theta=alt.Theta("점수", stack=True))
     
     pie = base.mark_arc(innerRadius=55, outerRadius=110).encode(
-        color=alt.Color("구분", scale=alt.Scale(domain=domain, range=color_range), legend=alt.Legend(title="구분")),
+        color=alt.Color("구분", scale=alt.Scale(domain=domain, range=color_range), legend=alt.Legend(title="오행")),
         order=alt.Order("점수", sort="descending"),
         tooltip=["구분", "점수", alt.Tooltip("비율", format=".1%")]
     )
@@ -288,7 +274,6 @@ def draw_pie_chart(scores, chart_type="ohaeng"):
     ).transform_filter(
         alt.datum.비율 > 0.03 
     )
-    
     return pie + text
 
 # ---------------------------------------------------------
@@ -372,16 +357,29 @@ with st.form("saju_form", clear_on_submit=False):
             </div>
             """, unsafe_allow_html=True)
             
-            st.subheader("📊 사주 세력 분포 (오행 & 십성)")
+            st.subheader("📊 사주 세력 분포")
             
             col_chart1, col_chart2 = st.columns(2)
             
             with col_chart1:
                 st.caption("🌲 오행 분포 (기질)")
-                chart1 = draw_pie_chart(element_scores, chart_type="ohaeng")
+                chart1 = draw_ohaeng_pie_chart(element_scores)
                 st.altair_chart(chart1, use_container_width=True)
                 
             with col_chart2:
-                st.caption("🤝 십성 분포 (사회성)")
-                chart2 = draw_pie_chart(sibseong_scores, chart_type="sibseong")
-                st.altair_chart(chart2, use_container_width=True)
+                st.caption("🤝 십성 비율 (사회성)")
+                # 십성(육친) 표 만들기
+                sibseong_list = []
+                total_sib = sum([max(0, s) for s in sibseong_scores.values()])
+                if total_sib == 0: total_sib = 1
+                
+                for name, score in sibseong_scores.items():
+                    safe_score = max(0, score)
+                    ratio = safe_score / total_sib
+                    sibseong_list.append({
+                        "성향": name,
+                        "비율": f"{ratio*100:.1f}%"
+                    })
+                
+                df_sib = pd.DataFrame(sibseong_list)
+                st.table(df_sib)
