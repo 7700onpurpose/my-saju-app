@@ -266,7 +266,8 @@ def draw_ohaeng_pie_chart(scores):
         tooltip=["구분", "점수", alt.Tooltip("비율", format=".1%")]
     )
     
-    text = base.mark_text(radius=135).encode(
+    # [수정] 원그래프 텍스트 위치(radius)를 135 -> 125로 줄여서 그래프에 더 가깝게 붙임
+    text = base.mark_text(radius=125).encode(
         text="라벨", 
         order=alt.Order("점수", sort="descending"),
         color=alt.value("black"),
@@ -377,29 +378,35 @@ with st.form("saju_form", clear_on_submit=False):
                 for name, score in sibseong_scores.items():
                     safe_score = max(0, score)
                     ratio = safe_score / total_sib
+                    
+                    # [수정] 폰트 크기를 키운 HTML 텍스트 생성
+                    styled_name = f"<span style='font-size:18px; font-weight:bold;'>{name}</span>"
+                    
                     data_sib.append({
-                        "성향": name,
+                        "성향": styled_name, # HTML 적용된 텍스트
                         "비율": ratio,
-                        "점수": safe_score # 정렬용
+                        "점수": safe_score
                     })
                 
                 df_sib = pd.DataFrame(data_sib)
-                
-                # 2. 비율 높은 순으로 정렬
+                # 점수 높은 순 정렬
                 df_sib = df_sib.sort_values(by="점수", ascending=False)
                 
-                # 3. 데이터프레임 차트 (Progress Column 활용)
+                # 3. 데이터프레임 차트 (Progress Column 활용 - 숫자 숨김)
                 st.dataframe(
                     df_sib,
                     column_config={
-                        "성향": st.column_config.TextColumn("성향 (십성)"),
+                        "성향": st.column_config.Column(
+                            "성향 (십성)",
+                            width="medium",
+                        ),
                         "비율": st.column_config.ProgressColumn(
                             "에너지 분포",
-                            format="%.1f%%",
+                            format=" ", # [수정] 숫자(퍼센트)를 공백으로 숨김
                             min_value=0,
                             max_value=1,
                         ),
-                        "점수": None # 점수 컬럼은 숨김
+                        "점수": None 
                     },
                     hide_index=True,
                     use_container_width=True
