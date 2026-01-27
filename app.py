@@ -232,7 +232,7 @@ class SajuCalculator:
         return sibseong_scores
 
 # ---------------------------------------------------------
-# [기능] 차트 & 메시지
+# [기능] 차트
 # ---------------------------------------------------------
 def send_discord_message(msg):
     try:
@@ -357,7 +357,7 @@ with st.form("saju_form", clear_on_submit=False):
             </div>
             """, unsafe_allow_html=True)
             
-            st.subheader("📊 사주 세력 분포")
+            st.subheader("📊 사주 세력 분포 (오행 & 십성)")
             
             col_chart1, col_chart2 = st.columns(2)
             
@@ -368,18 +368,39 @@ with st.form("saju_form", clear_on_submit=False):
                 
             with col_chart2:
                 st.caption("🤝 십성 비율 (사회성)")
-                # 십성(육친) 표 만들기
-                sibseong_list = []
+                
+                # 1. 십성 데이터 프레임 만들기
+                data_sib = []
                 total_sib = sum([max(0, s) for s in sibseong_scores.values()])
                 if total_sib == 0: total_sib = 1
                 
                 for name, score in sibseong_scores.items():
                     safe_score = max(0, score)
                     ratio = safe_score / total_sib
-                    sibseong_list.append({
+                    data_sib.append({
                         "성향": name,
-                        "비율": f"{ratio*100:.1f}%"
+                        "비율": ratio,
+                        "점수": safe_score # 정렬용
                     })
                 
-                df_sib = pd.DataFrame(sibseong_list)
-                st.table(df_sib)
+                df_sib = pd.DataFrame(data_sib)
+                
+                # 2. 비율 높은 순으로 정렬
+                df_sib = df_sib.sort_values(by="점수", ascending=False)
+                
+                # 3. 데이터프레임 차트 (Progress Column 활용)
+                st.dataframe(
+                    df_sib,
+                    column_config={
+                        "성향": st.column_config.TextColumn("성향 (십성)"),
+                        "비율": st.column_config.ProgressColumn(
+                            "에너지 분포",
+                            format="%.1f%%",
+                            min_value=0,
+                            max_value=1,
+                        ),
+                        "점수": None # 점수 컬럼은 숨김
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
