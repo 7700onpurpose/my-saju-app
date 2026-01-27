@@ -292,7 +292,7 @@ st.markdown("""
 
 calc = SajuCalculator()
 
-# 💡 [NEW] 십성 설명 데이터베이스
+# 💡 십성 설명 데이터베이스
 sibseong_desc_db = {
     "비겁 (나/동료)": """
     <b>💪 비겁이 가장 강한 당신은?</b><br>
@@ -412,7 +412,7 @@ with st.form("saju_form", clear_on_submit=False):
                 # 2. 비율 높은 순 정렬
                 data_sib.sort(key=lambda x: x["ratio"], reverse=True)
                 
-                # 3. HTML/CSS로 커스텀 바 만들기
+                # 3. HTML/CSS로 커스텀 바 만들기 (st.dataframe 대신 사용)
                 for item in data_sib:
                     width_percent = item["ratio"] * 100
                     st.markdown(f"""
@@ -426,14 +426,8 @@ with st.form("saju_form", clear_on_submit=False):
                     </div>
                     """, unsafe_allow_html=True)
                 
-                # 💡 [NEW] 가장 강한 십성 설명 박스 추가
-                max_sib_name = data_sib[0]["name"] # 정렬했으므로 첫 번째가 가장 큰 것
+                # 💡 [NEW] 가장 강한 십성 설명 박스 추가 (HTML 들여쓰기 제거!)
+                max_sib_name = data_sib[0]["name"]
                 max_sib_desc = sibseong_desc_db.get(max_sib_name, "설명 정보 없음")
                 
-                st.markdown(f"""
-                <div style='margin-top: 20px; padding: 15px; background-color: #e8f4f9; border-radius: 10px; border-left: 5px solid #42A5F5;'>
-                    <p style='font-size:15px; line-height:1.6; color:#333; margin:0;'>
-                        {max_sib_desc}
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"""<div style='margin-top: 20px; padding: 15px; background-color: #e8f4f9; border-radius: 10px; border-left: 5px solid #42A5F5;'><p style='font-size:15px; line-height:1.6; color:#333; margin:0;'>{max_sib_desc}</p></div>""", unsafe_allow_html=True)
