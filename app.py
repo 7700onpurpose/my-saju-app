@@ -234,13 +234,7 @@ class SajuCalculator:
 # ---------------------------------------------------------
 # [기능] 차트
 # ---------------------------------------------------------
-def send_discord_message(msg):
-    try:
-        url = st.secrets["discord_url"]
-        payload = {"content": msg}
-        requests.post(url, json=payload)
-    except Exception: pass
-
+# 💡 디스코드는 피로하므로 일단 기능 제거 (나중에 필요하면 다시 활성화)
 def draw_ohaeng_pie_chart(scores):
     data = []
     emoji_map = {"목": "🌲", "화": "🔥", "토": "⛰️", "금": "⚔️", "수": "🌊"}
@@ -279,11 +273,11 @@ def draw_ohaeng_pie_chart(scores):
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
-st.title("🔮 온라인 사주풀이 철학원")
+st.title("🔮 내 사주팔자 알아보기")
 
 st.markdown("""
 <div style="font-size:15px; color:#555; line-height:1.6;">
-익명 보장 온라인 철학원입니다.<br>
+내 팔자는 어떨까?<br>
 사주팔자를 면밀히 분석하여 정확하게 풀이합니다.<br>
 특별한 고민이 있다면 위안을 얻어보세요.
 </div>
@@ -329,8 +323,7 @@ with st.form("saju_form", clear_on_submit=False):
     with col1: birth_date = st.date_input("생년월일", min_value=datetime(1950, 1, 1))
     with col2: birth_time = st.time_input("태어난 시간")
     is_unknown_time = st.checkbox("태어난 시간을 몰라요")
-    concern = st.text_area("고민이 있다면 적어주세요 (선택).", height=150)
-    contact = st.text_input("고민에 대한 상세한 답변을 받아보실 이메일을 적어주세요 (선택).", placeholder="답변 받을 이메일")
+    # 고민과 이메일 입력란 삭제 (간소화)
     submitted = st.form_submit_button("내 사주 분석 결과 보기")
 
     if submitted:
@@ -358,20 +351,7 @@ with st.form("saju_form", clear_on_submit=False):
             elif strength_score > -20: power_desc = "신약"
             else: power_desc = "극신약"
             
-            log_text = "\n".join(logs) if logs else "특이사항 없음"
-            final_contact = contact if contact else "입력 안 함"
-            final_concern = concern if concern else "입력 안 함"
-            
-            msg = f"""
-**[🔮 퍼센트 분석 상담]**
-👤 {nickname} ({gender})
-🔖 {result_text}
-📊 점수: {strength_score} ({power_desc})
-🏆 세력전: {log_text}
-📧 {final_contact}
-📜 **고민**: {final_concern}
-"""
-            send_discord_message(msg)
+            # 디스코드 알림 전송 부분 제거 (피로도 감소)
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
@@ -412,7 +392,7 @@ with st.form("saju_form", clear_on_submit=False):
                 # 2. 비율 높은 순 정렬
                 data_sib.sort(key=lambda x: x["ratio"], reverse=True)
                 
-                # 3. HTML/CSS로 커스텀 바 만들기 (st.dataframe 대신 사용)
+                # 3. HTML/CSS로 커스텀 바 만들기
                 for item in data_sib:
                     width_percent = item["ratio"] * 100
                     st.markdown(f"""
@@ -426,7 +406,7 @@ with st.form("saju_form", clear_on_submit=False):
                     </div>
                     """, unsafe_allow_html=True)
                 
-                # 💡 [NEW] 가장 강한 십성 설명 박스 추가 (HTML 들여쓰기 제거!)
+                # 💡 [NEW] 가장 강한 십성 설명 박스 추가 (HTML 들여쓰기 제거 및 한 줄로 작성)
                 max_sib_name = data_sib[0]["name"]
                 max_sib_desc = sibseong_desc_db.get(max_sib_name, "설명 정보 없음")
                 
