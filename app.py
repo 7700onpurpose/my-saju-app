@@ -266,7 +266,6 @@ def draw_ohaeng_pie_chart(scores):
         tooltip=["구분", "점수", alt.Tooltip("비율", format=".1%")]
     )
     
-    # [수정] 원그래프 텍스트 위치(radius)를 135 -> 125로 줄여서 그래프에 더 가깝게 붙임
     text = base.mark_text(radius=125).encode(
         text="라벨", 
         order=alt.Order("점수", sort="descending"),
@@ -370,7 +369,7 @@ with st.form("saju_form", clear_on_submit=False):
             with col_chart2:
                 st.caption("🤝 십성 비율 (사회성)")
                 
-                # 1. 십성 데이터 프레임 만들기
+                # 1. 십성 데이터 준비
                 data_sib = []
                 total_sib = sum([max(0, s) for s in sibseong_scores.values()])
                 if total_sib == 0: total_sib = 1
@@ -378,36 +377,22 @@ with st.form("saju_form", clear_on_submit=False):
                 for name, score in sibseong_scores.items():
                     safe_score = max(0, score)
                     ratio = safe_score / total_sib
-                    
-                    # [수정] 폰트 크기를 키운 HTML 텍스트 생성
-                    styled_name = f"<span style='font-size:18px; font-weight:bold;'>{name}</span>"
-                    
-                    data_sib.append({
-                        "성향": styled_name, # HTML 적용된 텍스트
-                        "비율": ratio,
-                        "점수": safe_score
-                    })
+                    data_sib.append({"name": name, "ratio": ratio})
                 
-                df_sib = pd.DataFrame(data_sib)
-                # 점수 높은 순 정렬
-                df_sib = df_sib.sort_values(by="점수", ascending=False)
+                # 2. 비율 높은 순 정렬
+                data_sib.sort(key=lambda x: x["ratio"], reverse=True)
                 
-                # 3. 데이터프레임 차트 (Progress Column 활용 - 숫자 숨김)
-                st.dataframe(
-                    df_sib,
-                    column_config={
-                        "성향": st.column_config.Column(
-                            "성향 (십성)",
-                            width="medium",
-                        ),
-                        "비율": st.column_config.ProgressColumn(
-                            "에너지 분포",
-                            format=" ", # [수정] 숫자(퍼센트)를 공백으로 숨김
-                            min_value=0,
-                            max_value=1,
-                        ),
-                        "점수": None 
-                    },
-                    hide_index=True,
-                    use_container_width=True
-                )
+                # 3. HTML/CSS로 커스텀 바 만들기 (st.dataframe 대신 사용)
+                # 이 방식은 <span> 오류가 안 나고 폰트 크기 조절이 자유롭습니다.
+                for item in data_sib:
+                    width_percent = item["ratio"] * 100
+                    st.markdown(f"""
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size:18px; font-weight:600; color:#333; margin-bottom: 4px;">
+                            {item['name']}
+                        </div>
+                        <div style="width: 100%; background-color: #f0f2f6; border-radius: 8px; height: 16px;">
+                            <div style="width: {width_percent}%; background-color: #FF4B4B; height: 100%; border-radius: 8px;"></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
