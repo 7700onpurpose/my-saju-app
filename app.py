@@ -292,6 +292,36 @@ st.markdown("""
 
 calc = SajuCalculator()
 
+# 💡 [NEW] 십성 설명 데이터베이스
+sibseong_desc_db = {
+    "비겁 (나/동료)": """
+    <b>💪 비겁이 가장 강한 당신은?</b><br>
+    자기주장과 고집이 셉니다. 주관과 신념도 뚜렷합니다. 
+    통제해줄 관성이 부족한 경우, 하고자 하는 일을 남들이 막기 쉽지 않습니다. 
+    그만큼 남들에게 지기 싫은 경쟁심도 강합니다.
+    """,
+    "식상 (표현/재능)": """
+    <b>🎨 식상이 가장 강한 당신은?</b><br>
+    활달하고 호기심, 탐구심이 많습니다. 자유분방하며 자신을 표현하는 분야에서 두각을 보입니다. 
+    관성을 적당히 지닌 경우 인간관계에서 기가 세다는 말을 듣습니다.
+    """,
+    "재성 (재물/결과)": """
+    <b>💰 재성이 가장 강한 당신은?</b><br>
+    사회생활의 달인입니다. 하지만 그만큼 돈과 인간관계와 관련된 에너지를 많이 소모합니다. 
+    페르소나가 여러 개인 경우가 많습니다. 오행이 잘 갖춰진 경우 재물운을 타고나 풍요로운 삶을 누릴 수 있습니다.
+    """,
+    "관성 (명예/직장)": """
+    <b>👑 관성이 가장 강한 당신은?</b><br>
+    책임감이 강하고 원칙을 중요시합니다. 조직 생활에 적합하며 명예를 추구하는 성향이 있습니다. 
+    자기 통제력이 좋지만, 너무 강하면 스스로를 억압하거나 강박이 생길 수 있습니다.
+    """,
+    "인성 (지혜/도움)": """
+    <b>📚 인성이 가장 강한 당신은?</b><br>
+    생각이 많고 인내심이 많습니다. 자립하기보다 연장자에게 의존하고자 하는 욕구가 있습니다. 
+    우유부단한 면이 있어 재성을 갖춘 것이 좋습니다. 자존심이 세며, 관성을 잘 갖춘 경우 공부로 성취를 이루기 좋습니다.
+    """
+}
+
 with st.form("saju_form", clear_on_submit=False):
     nickname = st.text_input("닉네임", placeholder="예: 북극이")
     gender = st.radio("성별", ["여성", "남성"], horizontal=True)
@@ -382,8 +412,7 @@ with st.form("saju_form", clear_on_submit=False):
                 # 2. 비율 높은 순 정렬
                 data_sib.sort(key=lambda x: x["ratio"], reverse=True)
                 
-                # 3. HTML/CSS로 커스텀 바 만들기 (st.dataframe 대신 사용)
-                # 이 방식은 <span> 오류가 안 나고 폰트 크기 조절이 자유롭습니다.
+                # 3. HTML/CSS로 커스텀 바 만들기
                 for item in data_sib:
                     width_percent = item["ratio"] * 100
                     st.markdown(f"""
@@ -396,3 +425,15 @@ with st.form("saju_form", clear_on_submit=False):
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+                
+                # 💡 [NEW] 가장 강한 십성 설명 박스 추가
+                max_sib_name = data_sib[0]["name"] # 정렬했으므로 첫 번째가 가장 큰 것
+                max_sib_desc = sibseong_desc_db.get(max_sib_name, "설명 정보 없음")
+                
+                st.markdown(f"""
+                <div style='margin-top: 20px; padding: 15px; background-color: #e8f4f9; border-radius: 10px; border-left: 5px solid #42A5F5;'>
+                    <p style='font-size:15px; line-height:1.6; color:#333; margin:0;'>
+                        {max_sib_desc}
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
