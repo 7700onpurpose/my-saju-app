@@ -5,20 +5,7 @@ import altair as alt
 from datetime import datetime
 
 st.set_page_config(page_title="익명 철학원", page_icon="🔮", layout="wide")
-# ... 기존 import 문들 ...
-# st.set_page_config(...)  <-- 이 줄 바로 밑에 넣으세요
 
-hide_decoration_bar_style = '''
-    <style>
-        /* 상단 헤더 숨기기 */
-        header {visibility: hidden;}
-        /* 우측 상단 햄버거 메뉴 숨기기 */
-        #MainMenu {visibility: hidden;}
-        /* 하단 푸터 숨기기 */
-        footer {visibility: hidden;}
-    </style>
-'''
-st.markdown(hide_decoration_bar_style, unsafe_allow_html=True)
 
 # ... 나머지 코드 시작 ...
 # ---------------------------------------------------------
@@ -466,4 +453,5 @@ with st.form("saju_form", clear_on_submit=False):
                 max_sib_name = data_sib[0]["name"]
                 max_sib_desc = sibseong_desc_db.get(max_sib_name, "설명 정보 없음")
                 st.markdown(f"""<div style='margin-top: 20px; padding: 15px; background-color: #e8f4f9; border-radius: 10px; border-left: 5px solid #42A5F5;'><p style='font-size:15px; line-height:1.6; color:#333; margin:0;'>{max_sib_desc}</p></div>""", unsafe_allow_html=True)
+
 
