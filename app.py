@@ -26,26 +26,30 @@ class SajuCalculator:
         self.ji = list("자축인묘진사오미신유술해")
         self.month_ji = list("인묘진사오미신유술해자축")
         
-        # 오행 및 음양 정보 (0: 양, 1: 음)
+        self.gan_elements = {
+            "갑": "목", "을": "목", "병": "화", "정": "화", "무": "토", "기": "토", 
+            "경": "금", "신": "금", "임": "수", "계": "수"
+        }
+        self.ji_elements = {
+            "인": "목", "묘": "목", "사": "화", "오": "화", "진": "토", "술": "토", 
+            "축": "토", "미": "토", "신": "금", "유": "금", "해": "수", "자": "수"
+        }
+        
+        # 십성 계산용 오행/음양 데이터 (0: 양, 1: 음)
         self.gan_info = {
             "갑": ("목", 0), "을": ("목", 1), "병": ("화", 0), "정": ("화", 1),
             "무": ("토", 0), "기": ("토", 1), "경": ("금", 0), "신": ("금", 1),
             "임": ("수", 0), "계": ("수", 1)
         }
-        # 지지 오행/음양 (체 기준)
         self.ji_info = {
             "자": ("수", 0), "축": ("토", 1), "인": ("목", 0), "묘": ("목", 1),
-            "진": ("토", 0), "사": ("화", 1), "오": ("화", 0), "미": ("토", 1), # 사/오 체용 변경 고려X (표준)
+            "진": ("토", 0), "사": ("화", 1), "오": ("화", 0), "미": ("토", 1),
             "신": ("금", 0), "유": ("금", 1), "술": ("토", 0), "해": ("수", 1)
         }
-        
-        self.gan_elements = {k: v[0] for k, v in self.gan_info.items()}
-        self.ji_elements = {k: v[0] for k, v in self.ji_info.items()}
         
         self.saeng = {"목": "화", "화": "토", "토": "금", "금": "수", "수": "목"}
         self.geuk = {"목": "토", "토": "수", "수": "화", "화": "금", "금": "목"}
 
-        # 충/합 규칙들
         self.chung_rules = {
             frozenset(["갑", "경"]): 8, frozenset(["을", "신"]): 5,
             frozenset(["병", "임"]): 8, frozenset(["정", "계"]): 5,
@@ -104,35 +108,25 @@ class SajuCalculator:
         start_gan_idx = (day_gan_idx % 5) * 2
         return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
 
-    # 🌟 [NEW] 십성(Ten Gods) 이름 찾는 함수
     def get_ten_gods(self, day_gan, target_char):
-        if target_char == "?" or target_char not in self.gan_info and target_char not in self.ji_info:
+        if target_char == "?" or (target_char not in self.gan_info and target_char not in self.ji_info):
             return ""
-            
-        # 1. 일간 정보
         day_elem, day_pol = self.gan_info[day_gan]
-        
-        # 2. 타겟 정보 (천간 or 지지)
         if target_char in self.gan_info:
             target_elem, target_pol = self.gan_info[target_char]
         else:
             target_elem, target_pol = self.ji_info[target_char]
             
-        # 3. 십성 로직
-        if day_elem == target_elem:
-            return "비견" if day_pol == target_pol else "겁재"
-        elif self.saeng[day_elem] == target_elem: # 내가 생함 (식상)
-            return "식신" if day_pol == target_pol else "상관"
-        elif self.geuk[day_elem] == target_elem: # 내가 극함 (재성)
-            return "편재" if day_pol == target_pol else "정재"
-        elif self.geuk[target_elem] == day_elem: # 나를 극함 (관성)
-            return "편관" if day_pol == target_pol else "정관"
-        elif self.saeng[target_elem] == day_elem: # 나를 생함 (인성)
-            return "편인" if day_pol == target_pol else "정인"
+        if day_elem == target_elem: return "비견" if day_pol == target_pol else "겁재"
+        elif self.saeng[day_elem] == target_elem: return "식신" if day_pol == target_pol else "상관"
+        elif self.geuk[day_elem] == target_elem: return "편재" if day_pol == target_pol else "정재"
+        elif self.geuk[target_elem] == day_elem: return "편관" if day_pol == target_pol else "정관"
+        elif self.saeng[target_elem] == day_elem: return "편인" if day_pol == target_pol else "정인"
         return ""
 
     def calculate_weighted_scores(self, pillars):
         base_weights = [[10, 7], [17, 15], [20, 20], [10, 5]]
+        
         day_gan = pillars[2][0] 
         my_element = self.gan_elements[day_gan]
         
@@ -262,13 +256,6 @@ class SajuCalculator:
 # ---------------------------------------------------------
 # [기능] 차트 및 UI
 # ---------------------------------------------------------
-def send_discord_message(msg):
-    try:
-        url = st.secrets["discord_url"]
-        payload = {"content": msg}
-        requests.post(url, json=payload)
-    except Exception: pass
-
 def draw_ohaeng_pie_chart(scores):
     data = []
     emoji_map = {"목": "🌲", "화": "🔥", "토": "⛰️", "금": "⚔️", "수": "🌊"}
@@ -297,36 +284,36 @@ def draw_ohaeng_pie_chart(scores):
     ).transform_filter(alt.datum.비율 > 0.03)
     return pie + text
 
-# 🌟 [NEW] 만세력 카드 그리기 함수
+# 🌟 [수정] 만세력 원국표 (순서: 시 -> 일 -> 월 -> 연)
 def draw_manse_grid(pillars, calc, day_gan):
-    # 오행 색상 맵
     color_map = {
         "목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", 
         "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE"
     }
-    text_color = {"토": "black"} # 노랑 배경엔 검은 글씨
+    text_color = {"토": "black"} 
     
-    # 4개의 기둥 (시, 일, 월, 연 순서로 배치 - 전통 방식은 우측부터지만 UI상 좌측부터 시-일-월-연 or 연-월-일-시)
-    # 여기서는 현대적으로 [연-월-일-시] 순서로 표시
+    # 순서 변경: 시주(Time) -> 일주(Day) -> 월주(Month) -> 연주(Year)
+    # pillars 인덱스: 0(Year), 1(Month), 2(Day), 3(Time)
+    display_pillars = [pillars[3], pillars[2], pillars[1], pillars[0]]
+    titles = ["시주 (Time)", "일주 (Day)", "월주 (Month)", "연주 (Year)"]
     
     cols = st.columns(4)
-    titles = ["연주 (Year)", "월주 (Month)", "일주 (Day)", "시주 (Time)"]
     
     for i, col in enumerate(cols):
-        pillar = pillars[i]
-        stem = pillar[0] # 천간
-        branch = pillar[1] # 지지
+        pillar = display_pillars[i]
+        stem = pillar[0]
+        branch = pillar[1]
         
         with col:
             st.markdown(f"<div style='text-align:center; font-weight:bold; color:#555;'>{titles[i]}</div>", unsafe_allow_html=True)
             
-            # --- 천간 (Stem) ---
+            # --- 천간 ---
             s_elem = calc.gan_elements.get(stem, "?")
             s_bg = color_map.get(s_elem, "#EEE")
             s_txt = text_color.get(s_elem, "white")
             
-            # 십성 계산 (일간 본인은 '일원')
-            if i == 2: s_god = "일원 (Me)"
+            # 일주(index 1)의 천간 = 나(일원)
+            if i == 1: s_god = "일원 (Me)"
             else: s_god = calc.get_ten_gods(day_gan, stem)
             
             st.markdown(f"""
@@ -336,7 +323,7 @@ def draw_manse_grid(pillars, calc, day_gan):
             </div>
             """, unsafe_allow_html=True)
             
-            # --- 지지 (Branch) ---
+            # --- 지지 ---
             b_elem = calc.ji_elements.get(branch, "?")
             b_bg = color_map.get(b_elem, "#EEE")
             b_txt = text_color.get(b_elem, "white")
@@ -379,8 +366,7 @@ with st.form("saju_form", clear_on_submit=False):
     with col1: birth_date = st.date_input("생년월일", min_value=datetime(1950, 1, 1))
     with col2: birth_time = st.time_input("태어난 시간")
     is_unknown_time = st.checkbox("태어난 시간을 몰라요")
-    concern = st.text_area("고민이 있다면 적어주세요 (선택).", height=150)
-    contact = st.text_input("고민에 대한 상세한 답변을 받아보실 이메일을 적어주세요 (선택).", placeholder="답변 받을 이메일")
+    # concern, contact 삭제됨
     submitted = st.form_submit_button("내 사주 분석 결과 보기")
 
     if submitted:
@@ -407,17 +393,12 @@ with st.form("saju_form", clear_on_submit=False):
             elif strength_score > -20: power_desc = "신약"
             else: power_desc = "극신약"
             
-            log_text = "\n".join(logs) if logs else "특이사항 없음"
-            final_contact = contact if contact else "입력 안 함"
-            final_concern = concern if concern else "입력 안 함"
-            
-            # msg = ... (디스코드 알림 생략)
-            # send_discord_message(msg)
+            # send_discord_message 제거됨
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
-            # 🌟 [NEW] 만세력 원국표 표시
-            day_gan = day_pillar[0] # 일간
+            # 만세력 원국표 (순서: 시-일-월-연)
+            day_gan = day_pillar[0]
             st.markdown("### 📜 사주 원국표 (만세력)")
             draw_manse_grid(pillars, calc, day_gan)
             st.markdown("---")
