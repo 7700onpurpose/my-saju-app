@@ -345,10 +345,10 @@ def draw_manse_grid(pillars, calc, day_gan):
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
-st.title("🔮 온라인 사주풀이 철학원")
+st.title("🔮 내 사주팔자 분석기")
 st.markdown("""
 <div style="font-size:15px; color:#555; line-height:1.6;">
-익명 보장 온라인 철학원입니다.<br>
+내 팔자는 어떻길래..<br>
 사주팔자를 면밀히 분석하여 정확하게 풀이합니다.<br>
 특별한 고민이 있다면 위안을 얻어보세요.
 </div>
@@ -453,5 +453,6 @@ with st.form("saju_form", clear_on_submit=False):
                 max_sib_name = data_sib[0]["name"]
                 max_sib_desc = sibseong_desc_db.get(max_sib_name, "설명 정보 없음")
                 st.markdown(f"""<div style='margin-top: 20px; padding: 15px; background-color: #e8f4f9; border-radius: 10px; border-left: 5px solid #42A5F5;'><p style='font-size:15px; line-height:1.6; color:#333; margin:0;'>{max_sib_desc}</p></div>""", unsafe_allow_html=True)
+
 
 
