@@ -26,18 +26,26 @@ class SajuCalculator:
         self.ji = list("자축인묘진사오미신유술해")
         self.month_ji = list("인묘진사오미신유술해자축")
         
-        self.gan_elements = {
-            "갑": "목", "을": "목", "병": "화", "정": "화", "무": "토", "기": "토", 
-            "경": "금", "신": "금", "임": "수", "계": "수"
+        # 오행 및 음양 정보 (0: 양, 1: 음)
+        self.gan_info = {
+            "갑": ("목", 0), "을": ("목", 1), "병": ("화", 0), "정": ("화", 1),
+            "무": ("토", 0), "기": ("토", 1), "경": ("금", 0), "신": ("금", 1),
+            "임": ("수", 0), "계": ("수", 1)
         }
-        self.ji_elements = {
-            "인": "목", "묘": "목", "사": "화", "오": "화", "진": "토", "술": "토", 
-            "축": "토", "미": "토", "신": "금", "유": "금", "해": "수", "자": "수"
+        # 지지 오행/음양 (체 기준)
+        self.ji_info = {
+            "자": ("수", 0), "축": ("토", 1), "인": ("목", 0), "묘": ("목", 1),
+            "진": ("토", 0), "사": ("화", 1), "오": ("화", 0), "미": ("토", 1), # 사/오 체용 변경 고려X (표준)
+            "신": ("금", 0), "유": ("금", 1), "술": ("토", 0), "해": ("수", 1)
         }
+        
+        self.gan_elements = {k: v[0] for k, v in self.gan_info.items()}
+        self.ji_elements = {k: v[0] for k, v in self.ji_info.items()}
         
         self.saeng = {"목": "화", "화": "토", "토": "금", "금": "수", "수": "목"}
         self.geuk = {"목": "토", "토": "수", "수": "화", "화": "금", "금": "목"}
 
+        # 충/합 규칙들
         self.chung_rules = {
             frozenset(["갑", "경"]): 8, frozenset(["을", "신"]): 5,
             frozenset(["병", "임"]): 8, frozenset(["정", "계"]): 5,
@@ -96,9 +104,35 @@ class SajuCalculator:
         start_gan_idx = (day_gan_idx % 5) * 2
         return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
 
+    # 🌟 [NEW] 십성(Ten Gods) 이름 찾는 함수
+    def get_ten_gods(self, day_gan, target_char):
+        if target_char == "?" or target_char not in self.gan_info and target_char not in self.ji_info:
+            return ""
+            
+        # 1. 일간 정보
+        day_elem, day_pol = self.gan_info[day_gan]
+        
+        # 2. 타겟 정보 (천간 or 지지)
+        if target_char in self.gan_info:
+            target_elem, target_pol = self.gan_info[target_char]
+        else:
+            target_elem, target_pol = self.ji_info[target_char]
+            
+        # 3. 십성 로직
+        if day_elem == target_elem:
+            return "비견" if day_pol == target_pol else "겁재"
+        elif self.saeng[day_elem] == target_elem: # 내가 생함 (식상)
+            return "식신" if day_pol == target_pol else "상관"
+        elif self.geuk[day_elem] == target_elem: # 내가 극함 (재성)
+            return "편재" if day_pol == target_pol else "정재"
+        elif self.geuk[target_elem] == day_elem: # 나를 극함 (관성)
+            return "편관" if day_pol == target_pol else "정관"
+        elif self.saeng[target_elem] == day_elem: # 나를 생함 (인성)
+            return "편인" if day_pol == target_pol else "정인"
+        return ""
+
     def calculate_weighted_scores(self, pillars):
         base_weights = [[10, 7], [17, 15], [20, 20], [10, 5]]
-        
         day_gan = pillars[2][0] 
         my_element = self.gan_elements[day_gan]
         
@@ -209,7 +243,6 @@ class SajuCalculator:
 
         return element_scores, total_strength_score, my_element, logs
     
-    # 십성 변환 함수
     def convert_to_sibseong(self, my_element, element_scores):
         sibseong_scores = {
             "비겁 (나/동료)": element_scores[my_element],
@@ -218,23 +251,24 @@ class SajuCalculator:
             "인성 (지혜/도움)": 0,
             "관성 (명예/직장)": 0
         }
-        
         for key, value in self.saeng.items():
             if value == my_element:
-                sibseong_scores["인성 (지혜/도움)"] = element_scores[key]
-                break
-                
+                sibseong_scores["인성 (지혜/도움)"] = element_scores[key]; break
         for key, value in self.geuk.items():
             if value == my_element:
-                sibseong_scores["관성 (명예/직장)"] = element_scores[key]
-                break
-                
+                sibseong_scores["관성 (명예/직장)"] = element_scores[key]; break
         return sibseong_scores
 
 # ---------------------------------------------------------
-# [기능] 차트
+# [기능] 차트 및 UI
 # ---------------------------------------------------------
-# 💡 디스코드는 피로하므로 일단 기능 제거 (나중에 필요하면 다시 활성화)
+def send_discord_message(msg):
+    try:
+        url = st.secrets["discord_url"]
+        payload = {"content": msg}
+        requests.post(url, json=payload)
+    except Exception: pass
+
 def draw_ohaeng_pie_chart(scores):
     data = []
     emoji_map = {"목": "🌲", "화": "🔥", "토": "⛰️", "금": "⚔️", "수": "🌊"}
@@ -253,31 +287,75 @@ def draw_ohaeng_pie_chart(scores):
     df["라벨"] = df["이모지"] + " " + (df["비율"] * 100).round(1).astype(str) + "%"
     
     base = alt.Chart(df).encode(theta=alt.Theta("점수", stack=True))
-    
     pie = base.mark_arc(innerRadius=55, outerRadius=110).encode(
         color=alt.Color("구분", scale=alt.Scale(domain=domain, range=color_range), legend=alt.Legend(title="오행")),
         order=alt.Order("점수", sort="descending"),
         tooltip=["구분", "점수", alt.Tooltip("비율", format=".1%")]
     )
-    
     text = base.mark_text(radius=125).encode(
-        text="라벨", 
-        order=alt.Order("점수", sort="descending"),
-        color=alt.value("black"),
-        size=alt.value(18)
-    ).transform_filter(
-        alt.datum.비율 > 0.03 
-    )
+        text="라벨", order=alt.Order("점수", sort="descending"), color=alt.value("black"), size=alt.value(18)
+    ).transform_filter(alt.datum.비율 > 0.03)
     return pie + text
+
+# 🌟 [NEW] 만세력 카드 그리기 함수
+def draw_manse_grid(pillars, calc, day_gan):
+    # 오행 색상 맵
+    color_map = {
+        "목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", 
+        "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE"
+    }
+    text_color = {"토": "black"} # 노랑 배경엔 검은 글씨
+    
+    # 4개의 기둥 (시, 일, 월, 연 순서로 배치 - 전통 방식은 우측부터지만 UI상 좌측부터 시-일-월-연 or 연-월-일-시)
+    # 여기서는 현대적으로 [연-월-일-시] 순서로 표시
+    
+    cols = st.columns(4)
+    titles = ["연주 (Year)", "월주 (Month)", "일주 (Day)", "시주 (Time)"]
+    
+    for i, col in enumerate(cols):
+        pillar = pillars[i]
+        stem = pillar[0] # 천간
+        branch = pillar[1] # 지지
+        
+        with col:
+            st.markdown(f"<div style='text-align:center; font-weight:bold; color:#555;'>{titles[i]}</div>", unsafe_allow_html=True)
+            
+            # --- 천간 (Stem) ---
+            s_elem = calc.gan_elements.get(stem, "?")
+            s_bg = color_map.get(s_elem, "#EEE")
+            s_txt = text_color.get(s_elem, "white")
+            
+            # 십성 계산 (일간 본인은 '일원')
+            if i == 2: s_god = "일원 (Me)"
+            else: s_god = calc.get_ten_gods(day_gan, stem)
+            
+            st.markdown(f"""
+            <div style='background-color:{s_bg}; color:{s_txt}; border-radius:10px; padding:10px; margin:5px; text-align:center;'>
+                <div style='font-size:12px;'>{s_god}</div>
+                <div style='font-size:30px; font-weight:bold;'>{stem}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # --- 지지 (Branch) ---
+            b_elem = calc.ji_elements.get(branch, "?")
+            b_bg = color_map.get(b_elem, "#EEE")
+            b_txt = text_color.get(b_elem, "white")
+            b_god = calc.get_ten_gods(day_gan, branch)
+            
+            st.markdown(f"""
+            <div style='background-color:{b_bg}; color:{b_txt}; border-radius:10px; padding:10px; margin:5px; text-align:center;'>
+                <div style='font-size:30px; font-weight:bold;'>{branch}</div>
+                <div style='font-size:12px;'>{b_god}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
-st.title("🔮 내 사주팔자 알아보기")
-
+st.title("🔮 온라인 사주풀이 철학원")
 st.markdown("""
 <div style="font-size:15px; color:#555; line-height:1.6;">
-내 팔자는 어떨까?<br>
+익명 보장 온라인 철학원입니다.<br>
 사주팔자를 면밀히 분석하여 정확하게 풀이합니다.<br>
 특별한 고민이 있다면 위안을 얻어보세요.
 </div>
@@ -286,34 +364,12 @@ st.markdown("""
 
 calc = SajuCalculator()
 
-# 💡 십성 설명 데이터베이스
 sibseong_desc_db = {
-    "비겁 (나/동료)": """
-    <b>💪 비겁이 가장 강한 당신은?</b><br>
-    자기주장과 고집이 셉니다. 주관과 신념도 뚜렷합니다. 
-    통제해줄 관성이 부족한 경우, 하고자 하는 일을 남들이 막기 쉽지 않습니다. 
-    그만큼 남들에게 지기 싫은 경쟁심도 강합니다.
-    """,
-    "식상 (표현/재능)": """
-    <b>🎨 식상이 가장 강한 당신은?</b><br>
-    활달하고 호기심, 탐구심이 많습니다. 자유분방하며 자신을 표현하는 분야에서 두각을 보입니다. 
-    관성을 적당히 지닌 경우 인간관계에서 기가 세다는 말을 듣습니다.
-    """,
-    "재성 (재물/결과)": """
-    <b>💰 재성이 가장 강한 당신은?</b><br>
-    사회생활의 달인입니다. 하지만 그만큼 돈과 인간관계와 관련된 에너지를 많이 소모합니다. 
-    페르소나가 여러 개인 경우가 많습니다. 오행이 잘 갖춰진 경우 재물운을 타고나 풍요로운 삶을 누릴 수 있습니다.
-    """,
-    "관성 (명예/직장)": """
-    <b>👑 관성이 가장 강한 당신은?</b><br>
-    책임감이 강하고 원칙을 중요시합니다. 조직 생활에 적합하며 명예를 추구하는 성향이 있습니다. 
-    자기 통제력이 좋지만, 너무 강하면 스스로를 억압하거나 강박이 생길 수 있습니다.
-    """,
-    "인성 (지혜/도움)": """
-    <b>📚 인성이 가장 강한 당신은?</b><br>
-    생각이 많고 인내심이 많습니다. 자립하기보다 연장자에게 의존하고자 하는 욕구가 있습니다. 
-    우유부단한 면이 있어 재성을 갖춘 것이 좋습니다. 자존심이 세며, 관성을 잘 갖춘 경우 공부로 성취를 이루기 좋습니다.
-    """
+    "비겁 (나/동료)": """<b>💪 비겁이 가장 강한 당신은?</b><br>자기주장과 고집이 셉니다. 주관과 신념도 뚜렷합니다. 통제해줄 관성이 부족한 경우, 하고자 하는 일을 남들이 막기 쉽지 않습니다. 그만큼 남들에게 지기 싫은 경쟁심도 강합니다.""",
+    "식상 (표현/재능)": """<b>🎨 식상이 가장 강한 당신은?</b><br>활달하고 호기심, 탐구심이 많습니다. 자유분방하며 자신을 표현하는 분야에서 두각을 보입니다. 관성을 적당히 지닌 경우 인간관계에서 기가 세다는 말을 듣습니다.""",
+    "재성 (재물/결과)": """<b>💰 재성이 가장 강한 당신은?</b><br>사회생활의 달인입니다. 하지만 그만큼 돈과 인간관계와 관련된 에너지를 많이 소모합니다. 페르소나가 여러 개인 경우가 많습니다. 오행이 잘 갖춰진 경우 재물운을 타고나 풍요로운 삶을 누릴 수 있습니다.""",
+    "관성 (명예/직장)": """<b>👑 관성이 가장 강한 당신은?</b><br>책임감이 강하고 원칙을 중요시합니다. 조직 생활에 적합하며 명예를 추구하는 성향이 있습니다. 자기 통제력이 좋지만, 너무 강하면 스스로를 억압하거나 강박이 생길 수 있습니다.""",
+    "인성 (지혜/도움)": """<b>📚 인성이 가장 강한 당신은?</b><br>생각이 많고 인내심이 많습니다. 자립하기보다 연장자에게 의존하고자 하는 욕구가 있습니다. 우유부단한 면이 있어 재성을 갖춘 것이 좋습니다. 자존심이 세며, 관성을 잘 갖춘 경우 공부로 성취를 이루기 좋습니다."""
 }
 
 with st.form("saju_form", clear_on_submit=False):
@@ -323,7 +379,8 @@ with st.form("saju_form", clear_on_submit=False):
     with col1: birth_date = st.date_input("생년월일", min_value=datetime(1950, 1, 1))
     with col2: birth_time = st.time_input("태어난 시간")
     is_unknown_time = st.checkbox("태어난 시간을 몰라요")
-    # 고민과 이메일 입력란 삭제 (간소화)
+    concern = st.text_area("고민이 있다면 적어주세요 (선택).", height=150)
+    contact = st.text_input("고민에 대한 상세한 답변을 받아보실 이메일을 적어주세요 (선택).", placeholder="답변 받을 이메일")
     submitted = st.form_submit_button("내 사주 분석 결과 보기")
 
     if submitted:
@@ -343,7 +400,6 @@ with st.form("saju_form", clear_on_submit=False):
 
             element_scores, strength_score, my_elem, logs = calc.calculate_weighted_scores(pillars)
             sibseong_scores = calc.convert_to_sibseong(my_elem, element_scores)
-            
             my_interpretation = ilju_data.get(day_pillar, default_desc)
 
             if strength_score > 20: power_desc = "극신강"
@@ -351,10 +407,21 @@ with st.form("saju_form", clear_on_submit=False):
             elif strength_score > -20: power_desc = "신약"
             else: power_desc = "극신약"
             
-            # 디스코드 알림 전송 부분 제거 (피로도 감소)
+            log_text = "\n".join(logs) if logs else "특이사항 없음"
+            final_contact = contact if contact else "입력 안 함"
+            final_concern = concern if concern else "입력 안 함"
+            
+            # msg = ... (디스코드 알림 생략)
+            # send_discord_message(msg)
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
+            # 🌟 [NEW] 만세력 원국표 표시
+            day_gan = day_pillar[0] # 일간
+            st.markdown("### 📜 사주 원국표 (만세력)")
+            draw_manse_grid(pillars, calc, day_gan)
+            st.markdown("---")
+
             if logs:
                 st.warning(f"🏆 **오행 세력 전쟁 리포트**\n\n" + "\n".join([f"- {log}" for log in logs]))
             
@@ -378,36 +445,26 @@ with st.form("saju_form", clear_on_submit=False):
                 
             with col_chart2:
                 st.caption("🤝 십성 비율 (사회성)")
-                
-                # 1. 십성 데이터 준비
                 data_sib = []
                 total_sib = sum([max(0, s) for s in sibseong_scores.values()])
                 if total_sib == 0: total_sib = 1
-                
                 for name, score in sibseong_scores.items():
                     safe_score = max(0, score)
                     ratio = safe_score / total_sib
                     data_sib.append({"name": name, "ratio": ratio})
-                
-                # 2. 비율 높은 순 정렬
                 data_sib.sort(key=lambda x: x["ratio"], reverse=True)
                 
-                # 3. HTML/CSS로 커스텀 바 만들기
                 for item in data_sib:
                     width_percent = item["ratio"] * 100
                     st.markdown(f"""
                     <div style="margin-bottom: 12px;">
-                        <div style="font-size:18px; font-weight:600; color:#333; margin-bottom: 4px;">
-                            {item['name']}
-                        </div>
+                        <div style="font-size:18px; font-weight:600; color:#333; margin-bottom: 4px;">{item['name']}</div>
                         <div style="width: 100%; background-color: #f0f2f6; border-radius: 8px; height: 16px;">
                             <div style="width: {width_percent}%; background-color: #FF4B4B; height: 100%; border-radius: 8px;"></div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
                 
-                # 💡 [NEW] 가장 강한 십성 설명 박스 추가 (HTML 들여쓰기 제거 및 한 줄로 작성)
                 max_sib_name = data_sib[0]["name"]
                 max_sib_desc = sibseong_desc_db.get(max_sib_name, "설명 정보 없음")
-                
                 st.markdown(f"""<div style='margin-top: 20px; padding: 15px; background-color: #e8f4f9; border-radius: 10px; border-left: 5px solid #42A5F5;'><p style='font-size:15px; line-height:1.6; color:#333; margin:0;'>{max_sib_desc}</p></div>""", unsafe_allow_html=True)
