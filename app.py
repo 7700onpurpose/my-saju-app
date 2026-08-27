@@ -340,7 +340,8 @@ def draw_manse_grid(pillars, calc, day_gan):
             </div>
             """, unsafe_allow_html=True)
 
-def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan):
+# 🌟 [수정] 현재 속한 대운을 파악할 수 있도록 current_age 파라미터 추가
+def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age):
     color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3"}
     text_color = {"토": "black"}
 
@@ -373,20 +374,29 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan):
     for i, col in enumerate(cols):
         dw = daewuns[i]
         with col:
-            st.markdown(get_pillar_card(f"{dw['age']}세", dw['pillar'][0], dw['pillar'][1]), unsafe_allow_html=True)
+            st.markdown(get_pillar_card(f"{dw['age']}세~", dw['pillar'][0], dw['pillar'][1]), unsafe_allow_html=True)
             
     st.write("")
     st.write("")
     
-    st.markdown("#### 🎯 현재 운세 (세운 / 월운)")
+    # 🌟 [NEW] 현재 나이 기준으로 현재 대운 찾기
+    current_dw = daewuns[0] # 첫 번째 대운을 기본값으로 세팅
+    for dw in daewuns:
+        if current_age >= dw['age']:
+            current_dw = dw
+    
+    st.markdown("#### 🎯 현재 운세 (대운 / 세운 / 월운)")
     now = datetime.now()
-    col1, col2, _ = st.columns([1.5, 1.5, 5])
+    
+    # 3개의 기둥을 보여주기 위해 컬럼 조정 (대운, 세운, 월운)
+    col1, col2, col3, _ = st.columns([1.5, 1.5, 1.5, 3.5])
     
     with col1:
-        st.markdown(get_pillar_card(f"올해 ({now.year}년)", sewun[0], sewun[1]), unsafe_allow_html=True)
+        st.markdown(get_pillar_card(f"현재 대운 ({current_dw['age']}세~)", current_dw['pillar'][0], current_dw['pillar'][1]), unsafe_allow_html=True)
     with col2:
-        st.markdown(get_pillar_card(f"이번달 ({now.month}월)", wolun[0], wolun[1]), unsafe_allow_html=True)
-
+        st.markdown(get_pillar_card(f"올해 세운 ({now.year}년)", sewun[0], sewun[1]), unsafe_allow_html=True)
+    with col3:
+        st.markdown(get_pillar_card(f"이번달 월운 ({now.month}월)", wolun[0], wolun[1]), unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # [화면 구성]
@@ -424,17 +434,14 @@ with st.form("saju_form", clear_on_submit=False):
         if not nickname: st.error("닉네임을 적어주세요!")
         else:
             if is_unknown_time:
-                # 🚨 [핵심 수정] 시간을 모를 때는 시간 보정(+30분)을 하지 않고, 
-                # 무조건 그날의 낮 12시 정각 기준으로 계산하여 날짜가 넘어가지 않도록 강제 방어!
                 safe_dt = datetime.combine(birth_date, datetime.strptime("12:00", "%H:%M").time())
-                
                 year_pillar = calc.get_year_pillar(safe_dt.year)
                 month_pillar = calc.get_month_pillar(year_pillar, safe_dt)
                 day_pillar = calc.get_day_pillar(safe_dt)
                 pillars = [year_pillar, month_pillar, day_pillar, ["?", "?"]]
             else:
                 original_dt = datetime.combine(birth_date, birth_time)
-                adjusted_dt = original_dt + timedelta(minutes=30) # 한국 표준시 오차 보정
+                adjusted_dt = original_dt + timedelta(minutes=30) 
                 
                 year_pillar = calc.get_year_pillar(adjusted_dt.year)
                 month_pillar = calc.get_month_pillar(year_pillar, adjusted_dt)
@@ -459,11 +466,15 @@ with st.form("saju_form", clear_on_submit=False):
             st.markdown("---")
             
             today = datetime.now()
+            # 🌟 [NEW] 명리학적 한국 나이 계산 (현재 연도 - 출생 연도 + 1)
+            current_age = today.year - birth_date.year + 1
+            
             sewun = calc.get_year_pillar(today.year)
             wolun = calc.get_month_pillar(sewun, today)
             daewuns = calc.get_daewun(year_pillar, month_pillar, gender, birth_date)
             
-            draw_unse_grid(daewuns, sewun, wolun, calc, day_gan)
+            # 파라미터에 current_age 추가!
+            draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age)
             st.markdown("---")
 
             if logs:
