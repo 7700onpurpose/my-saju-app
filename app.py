@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import altair as alt
-from datetime import datetime, timedelta  # 🚨 timedelta 추가됨
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="익명 철학원", page_icon="🔮", layout="wide")
 
@@ -97,11 +97,41 @@ class SajuCalculator:
 
     def get_time_pillar(self, day_pillar, hour):
         day_gan = day_pillar[0]
-        # 🚨 [수정] 외부에서 이미 +30분 보정된 시간이 들어오므로 그대로 2로 나눔
         time_idx = hour // 2 % 12
         day_gan_idx = self.gan.index(day_gan)
         start_gan_idx = (day_gan_idx % 5) * 2
         return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
+
+    # 🌟 [NEW] 대운(10년 운) 계산 함수
+    def get_daewun(self, year_pillar, month_pillar, gender, birth_date):
+        is_male = (gender == "남성")
+        year_stem = year_pillar[0]
+        year_stem_idx = self.gan.index(year_stem)
+        is_yang_year = (year_stem_idx % 2 == 0) # 양간 여부
+        
+        # 순행(1) / 역행(-1) 결정 로직
+        if (is_male and is_yang_year) or (not is_male and not is_yang_year):
+            direction = 1  # 순행
+            daewun_num = (30 - birth_date.day) // 3
+        else:
+            direction = -1 # 역행
+            daewun_num = birth_date.day // 3
+            
+        if daewun_num <= 0: daewun_num = 1
+        if daewun_num > 10: daewun_num = 10
+        
+        m_gan_idx = self.gan.index(month_pillar[0])
+        m_ji_idx = self.ji.index(month_pillar[1])
+        
+        daewuns = []
+        for i in range(1, 9): # 8개의 대운 기둥 생성
+            g_idx = (m_gan_idx + i * direction) % 10
+            j_idx = (m_ji_idx + i * direction) % 12
+            daewuns.append({
+                "age": daewun_num + (i - 1) * 10,
+                "pillar": self.gan[g_idx] + self.ji[j_idx]
+            })
+        return daewuns
 
     def get_ten_gods(self, day_gan, target_char):
         if target_char in ["?", "??"] or (target_char not in self.gan_info and target_char not in self.ji_info):
@@ -130,12 +160,9 @@ class SajuCalculator:
         total_strength_score = 0
         logs = [] 
 
-        # Step 1: 기본 점수
         for i, pillar in enumerate(pillars):
             for j, char in enumerate(pillar):
-                if char in ["?", "??"]: 
-                    continue
-                
+                if char in ["?", "??"]: continue
                 weight = base_weights[i][j]
                 elem = self.gan_elements.get(char, self.ji_elements.get(char))
                 element_scores[elem] += weight
@@ -147,7 +174,6 @@ class SajuCalculator:
                 elif self.geuk[my_element] == elem: total_strength_score -= weight
                 elif self.geuk[elem] == my_element: total_strength_score -= weight
 
-        # Step 2: 천간충
         for i, pillar in enumerate(pillars):
             if i != 2 and pillar[0] not in ["?", "??"]:
                 pair = frozenset([day_gan, pillar[0]])
@@ -157,7 +183,6 @@ class SajuCalculator:
                     total_strength_score -= penalty
                     logs.append(f"💥 천간충 ({day_gan} 💥 {pillar[0]})! 내 기운 -{penalty}")
 
-        # Step 3: 천간합
         stems = [p[0] for p in pillars if p[0] not in ["?", "??"]]
         for pair, changes in self.hap_rules.items():
             if pair.issubset(set(stems)):
@@ -168,7 +193,6 @@ class SajuCalculator:
                         else: total_strength_score -= score
                 logs.append(f"💖 천간합 ({' ❤️ '.join(pair)}) 성립!")
 
-        # Step 4: 지지충
         branches = [p[1] for p in pillars if p[1] not in ["?", "??"]]
         branches_set = set(branches)
         for rule_set, e1, e2, sc in self.jiji_chung_rules:
@@ -185,7 +209,6 @@ class SajuCalculator:
                 conflict_str = f"{list(rule_set)[0]} 💥 {list(rule_set)[1]}"
                 logs.append(f"⚔️ 지지충 ({conflict_str})! 승자:{w}(+{sc})")
 
-        # Step 5: 삼합/방합
         for rules in [self.samhap_rules, self.banghap_rules]:
             for target, rule in rules.items():
                 cnt = len(rule["members"].intersection(branches_set))
@@ -198,7 +221,6 @@ class SajuCalculator:
                     if target == my_element or self.saeng[target] == my_element: total_strength_score += add
                     else: total_strength_score -= add
 
-        # Step 6: 병존
         for seq in [stems, branches]:
             for k in range(len(seq)-1):
                 if seq[k] == seq[k+1] and seq[k] not in ["?", "??"]:
@@ -209,7 +231,6 @@ class SajuCalculator:
                     if elem == my_element or self.saeng[elem] == my_element: total_strength_score += 10
                     else: total_strength_score -= 10
 
-        # Step 7: Top 2 Battle
         sorted_scores = sorted(element_scores.items(), key=lambda x: x[1], reverse=True)
         top1_elem = sorted_scores[0][0]
         top2_elem = sorted_scores[1][0]
@@ -282,43 +303,34 @@ def draw_ohaeng_pie_chart(scores):
     ).transform_filter(alt.datum.비율 > 0.03)
     return pie + text
 
-# 만세력 원국표 (순서: 시 -> 일 -> 월 -> 연)
+# 만세력 원국표
 def draw_manse_grid(pillars, calc, day_gan):
-    color_map = {
-        "목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", 
-        "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE", "??": "#EEE"
-    }
+    color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE", "??": "#EEE"}
     text_color = {"토": "black"} 
     
     display_pillars = [pillars[3], pillars[2], pillars[1], pillars[0]]
     titles = ["시주 (Time)", "일주 (Day)", "월주 (Month)", "연주 (Year)"]
-    
     cols = st.columns(4)
     
     for i, col in enumerate(cols):
-        pillar = display_pillars[i]
-        stem = pillar[0]
-        branch = pillar[1]
+        stem = display_pillars[i][0]
+        branch = display_pillars[i][1]
         
         with col:
             st.markdown(f"<div style='text-align:center; font-weight:bold; color:#555;'>{titles[i]}</div>", unsafe_allow_html=True)
             
-            # --- 천간 ---
             s_elem = calc.gan_elements.get(stem, "?")
             s_bg = color_map.get(s_elem, "#EEE")
             s_txt = text_color.get(s_elem, "white")
-            
-            if i == 1: s_god = "일원 (Me)"
-            else: s_god = calc.get_ten_gods(day_gan, stem)
+            s_god = "일원 (Me)" if i == 1 else calc.get_ten_gods(day_gan, stem)
             
             st.markdown(f"""
             <div style='background-color:{s_bg}; color:{s_txt}; border-radius:10px; padding:10px; margin:5px; text-align:center;'>
-                <div style='font-size:12px;'>{s_god}</div>
-                <div style='font-size:30px; font-weight:bold;'>{stem}</div>
+                <div style='font-size:13px; opacity:0.9;'>{s_god}</div>
+                <div style='font-size:32px; font-weight:bold;'>{stem}</div>
             </div>
             """, unsafe_allow_html=True)
             
-            # --- 지지 ---
             b_elem = calc.ji_elements.get(branch, "?")
             b_bg = color_map.get(b_elem, "#EEE")
             b_txt = text_color.get(b_elem, "white")
@@ -326,10 +338,61 @@ def draw_manse_grid(pillars, calc, day_gan):
             
             st.markdown(f"""
             <div style='background-color:{b_bg}; color:{b_txt}; border-radius:10px; padding:10px; margin:5px; text-align:center;'>
-                <div style='font-size:30px; font-weight:bold;'>{branch}</div>
-                <div style='font-size:12px;'>{b_god}</div>
+                <div style='font-size:32px; font-weight:bold;'>{branch}</div>
+                <div style='font-size:13px; opacity:0.9;'>{b_god}</div>
             </div>
             """, unsafe_allow_html=True)
+
+# 🌟 [NEW] 운세 흐름 (대운/세운/월운) UI 함수
+def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan):
+    color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3"}
+    text_color = {"토": "black"}
+
+    def get_pillar_card(title, stem, branch):
+        s_elem = calc.gan_elements.get(stem, "?")
+        s_bg = color_map.get(s_elem, "#EEE")
+        s_txt = text_color.get(s_elem, "white")
+        s_god = calc.get_ten_gods(day_gan, stem)
+        
+        b_elem = calc.ji_elements.get(branch, "?")
+        b_bg = color_map.get(b_elem, "#EEE")
+        b_txt = text_color.get(b_elem, "white")
+        b_god = calc.get_ten_gods(day_gan, branch)
+        
+        return f"""
+        <div style='text-align:center; font-weight:bold; color:#555; margin-bottom:5px; font-size:14px;'>{title}</div>
+        <div style='background-color:{s_bg}; color:{s_txt}; border-radius:8px; padding:5px; margin-bottom:3px; text-align:center;'>
+            <div style='font-size:11px; opacity:0.9;'>{s_god}</div>
+            <div style='font-size:22px; font-weight:bold;'>{stem}</div>
+        </div>
+        <div style='background-color:{b_bg}; color:{b_txt}; border-radius:8px; padding:5px; text-align:center;'>
+            <div style='font-size:22px; font-weight:bold;'>{branch}</div>
+            <div style='font-size:11px; opacity:0.9;'>{b_god}</div>
+        </div>
+        """
+
+    # 대운 UI (8칸)
+    st.markdown("#### 🌊 10년 주기 대운 흐름")
+    st.caption("※ 대운수(나이)는 절기가 아닌 생일 기준 근사치입니다.")
+    cols = st.columns(8)
+    for i, col in enumerate(cols):
+        dw = daewuns[i]
+        with col:
+            st.markdown(get_pillar_card(f"{dw['age']}세", dw['pillar'][0], dw['pillar'][1]), unsafe_allow_html=True)
+            
+    st.write("")
+    st.write("")
+    
+    # 세운 & 월운 UI (현재 기준)
+    st.markdown("#### 🎯 현재 운세 (세운 / 월운)")
+    now = datetime.now()
+    col1, col2, _ = st.columns([1.5, 1.5, 5])
+    
+    with col1:
+        st.markdown(get_pillar_card(f"올해 ({now.year}년)", sewun[0], sewun[1]), unsafe_allow_html=True)
+    with col2:
+        st.markdown(get_pillar_card(f"이번달 ({now.month}월)", wolun[0], wolun[1]), unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------
 # [화면 구성]
@@ -348,7 +411,7 @@ calc = SajuCalculator()
 
 sibseong_desc_db = {
     "비겁 (나/동료)": """<b>💪 비겁이 가장 강한 당신은?</b><br>자기주장과 고집이 셉니다. 주관과 신념도 뚜렷합니다. 통제해줄 관성이 부족한 경우, 하고자 하는 일을 남들이 막기 쉽지 않습니다. 그만큼 남들에게 지기 싫은 경쟁심도 강합니다.""",
-    "식상 (표현/재능)": """<b>🎨 식상이 가장 강한 당신은?</b><br>활달하고 호기심, 탐구심이 많습니다. 자유분방하며 자신을 표현하는 분야에서 두각을 보닙니다. 관성을 적당히 지닌 경우 인간관계에서 기가 세다는 말을 듣습니다.""",
+    "식상 (표현/재능)": """<b>🎨 식상이 가장 강한 당신은?</b><br>활달하고 호기심, 탐구심이 많습니다. 자유분방하며 자신을 표현하는 분야에서 두각을 보입니다. 관성을 적당히 지닌 경우 인간관계에서 기가 세다는 말을 듣습니다.""",
     "재성 (재물/결과)": """<b>💰 재성이 가장 강한 당신은?</b><br>사회생활의 달인입니다. 하지만 그만큼 돈과 인간관계와 관련된 에너지를 많이 소모합니다. 페르소나가 여러 개인 경우가 많습니다. 오행이 잘 갖춰진 경우 재물운을 타고나 풍요로운 삶을 누릴 수 있습니다.""",
     "관성 (명예/직장)": """<b>👑 관성이 가장 강한 당신은?</b><br>책임감이 강하고 원칙을 중요시합니다. 조직 생활에 적합하며 명예를 추구하는 성향이 있습니다. 자기 통제력이 좋지만, 너무 강하면 스스로를 억압하거나 강박이 생길 수 있습니다.""",
     "인성 (지혜/도움)": """<b>📚 인성이 가장 강한 당신은?</b><br>생각이 많고 인내심이 많습니다. 자립하기보다 연장자에게 의존하고자 하는 욕구가 있습니다. 우유부단한 면이 있어 재성을 갖춘 것이 좋습니다. 자존심이 세며, 관성을 잘 갖춘 경우 공부로 성취를 이루기 좋습니다."""
@@ -367,9 +430,7 @@ with st.form("saju_form", clear_on_submit=False):
         if not nickname: st.error("닉네임을 적어주세요!")
         else:
             original_dt = datetime.combine(birth_date, birth_time)
-            # 🚨 [수정] 한국 표준시 오차 보정 (+30분)
-            # 11:30을 12:00으로 만들어 시간 인덱스를 정확하게 분할
-            adjusted_dt = original_dt + timedelta(minutes=30)
+            adjusted_dt = original_dt + timedelta(minutes=30) # 한국 표준시 오차 보정
             
             year_pillar = calc.get_year_pillar(adjusted_dt.year)
             month_pillar = calc.get_month_pillar(year_pillar, adjusted_dt)
@@ -392,11 +453,23 @@ with st.form("saju_form", clear_on_submit=False):
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
+            # --- 사주 원국표 ---
             day_gan = day_pillar[0]
             st.markdown("### 📜 사주 원국표 (만세력)")
             draw_manse_grid(pillars, calc, day_gan)
             st.markdown("---")
+            
+            # --- 🌟 대운/세운/월운 ---
+            # 현재 시간 기준으로 세운/월운 도출
+            today = datetime.now()
+            sewun = calc.get_year_pillar(today.year)
+            wolun = calc.get_month_pillar(sewun, today)
+            daewuns = calc.get_daewun(year_pillar, month_pillar, gender, birth_date)
+            
+            draw_unse_grid(daewuns, sewun, wolun, calc, day_gan)
+            st.markdown("---")
 
+            # --- 전투 리포트 및 해석 ---
             if logs:
                 st.warning(f"🏆 **오행 세력 전쟁 리포트**\n\n" + "\n".join([f"- {log}" for log in logs]))
             
