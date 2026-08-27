@@ -6,8 +6,6 @@ from datetime import datetime
 
 st.set_page_config(page_title="익명 철학원", page_icon="🔮", layout="wide")
 
-
-# ... 나머지 코드 시작 ...
 # ---------------------------------------------------------
 # [나만의 일주 해석 사전]
 # ---------------------------------------------------------
@@ -35,21 +33,11 @@ class SajuCalculator:
             "임": ("수", 0), "계": ("수", 1)
         }
         
-        # ⚡ [수정] 지지 십성용 음양(체용) 설정 완벽 수정
-        # 자(음), 축(음), 인(양), 묘(음), 진(양), 사(양), 오(음), 미(음), 신(양), 유(음), 술(양), 해(양)
+        # 지지 십성용 음양(체용) 설정
         self.ji_info = {
-            "자": ("수", 1), # 체는 양이나 용은 음 (계수)
-            "축": ("토", 1), 
-            "인": ("목", 0), 
-            "묘": ("목", 1),
-            "진": ("토", 0), 
-            "사": ("화", 0), # 체는 음이나 용은 양 (병화) -> 님 케이스 해결!
-            "오": ("화", 1), # 체는 양이나 용은 음 (정화)
-            "미": ("토", 1), 
-            "신": ("금", 0), 
-            "유": ("금", 1), 
-            "술": ("토", 0), 
-            "해": ("수", 0)  # 체는 음이나 용은 양 (임수)
+            "자": ("수", 1), "축": ("토", 1), "인": ("목", 0), "묘": ("목", 1),
+            "진": ("토", 0), "사": ("화", 0), "오": ("화", 1), "미": ("토", 1), 
+            "신": ("금", 0), "유": ("금", 1), "술": ("토", 0), "해": ("수", 0)
         }
         
         self.gan_elements = {k: v[0] for k, v in self.gan_info.items()}
@@ -146,6 +134,8 @@ class SajuCalculator:
         # Step 1: 기본 점수
         for i, pillar in enumerate(pillars):
             for j, char in enumerate(pillar):
+                if char == "?": continue # 🚨 이 부분이 추가되었습니다! (모르는 시간 건너뛰기)
+                
                 weight = base_weights[i][j]
                 elem = self.gan_elements.get(char, self.ji_elements.get(char))
                 element_scores[elem] += weight
@@ -159,7 +149,7 @@ class SajuCalculator:
 
         # Step 2: 천간충
         for i, pillar in enumerate(pillars):
-            if i != 2:
+            if i != 2 and pillar[0] != "?":
                 pair = frozenset([day_gan, pillar[0]])
                 if pair in self.chung_rules:
                     penalty = self.chung_rules[pair]
@@ -372,7 +362,6 @@ with st.form("saju_form", clear_on_submit=False):
     with col1: birth_date = st.date_input("생년월일", min_value=datetime(1950, 1, 1))
     with col2: birth_time = st.time_input("태어난 시간")
     is_unknown_time = st.checkbox("태어난 시간을 몰라요")
-    # concern, contact 삭제됨
     submitted = st.form_submit_button("내 사주 분석 결과 보기")
 
     if submitted:
@@ -453,6 +442,3 @@ with st.form("saju_form", clear_on_submit=False):
                 max_sib_name = data_sib[0]["name"]
                 max_sib_desc = sibseong_desc_db.get(max_sib_name, "설명 정보 없음")
                 st.markdown(f"""<div style='margin-top: 20px; padding: 15px; background-color: #e8f4f9; border-radius: 10px; border-left: 5px solid #42A5F5;'><p style='font-size:15px; line-height:1.6; color:#333; margin:0;'>{max_sib_desc}</p></div>""", unsafe_allow_html=True)
-
-
-
