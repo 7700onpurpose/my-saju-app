@@ -102,19 +102,17 @@ class SajuCalculator:
         start_gan_idx = (day_gan_idx % 5) * 2
         return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
 
-    # 🌟 [NEW] 대운(10년 운) 계산 함수
     def get_daewun(self, year_pillar, month_pillar, gender, birth_date):
         is_male = (gender == "남성")
         year_stem = year_pillar[0]
         year_stem_idx = self.gan.index(year_stem)
-        is_yang_year = (year_stem_idx % 2 == 0) # 양간 여부
+        is_yang_year = (year_stem_idx % 2 == 0)
         
-        # 순행(1) / 역행(-1) 결정 로직
         if (is_male and is_yang_year) or (not is_male and not is_yang_year):
-            direction = 1  # 순행
+            direction = 1 
             daewun_num = (30 - birth_date.day) // 3
         else:
-            direction = -1 # 역행
+            direction = -1 
             daewun_num = birth_date.day // 3
             
         if daewun_num <= 0: daewun_num = 1
@@ -124,7 +122,7 @@ class SajuCalculator:
         m_ji_idx = self.ji.index(month_pillar[1])
         
         daewuns = []
-        for i in range(1, 9): # 8개의 대운 기둥 생성
+        for i in range(1, 9):
             g_idx = (m_gan_idx + i * direction) % 10
             j_idx = (m_ji_idx + i * direction) % 12
             daewuns.append({
@@ -303,7 +301,6 @@ def draw_ohaeng_pie_chart(scores):
     ).transform_filter(alt.datum.비율 > 0.03)
     return pie + text
 
-# 만세력 원국표
 def draw_manse_grid(pillars, calc, day_gan):
     color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE", "??": "#EEE"}
     text_color = {"토": "black"} 
@@ -343,7 +340,6 @@ def draw_manse_grid(pillars, calc, day_gan):
             </div>
             """, unsafe_allow_html=True)
 
-# 🌟 [NEW] 운세 흐름 (대운/세운/월운) UI 함수
 def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan):
     color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3"}
     text_color = {"토": "black"}
@@ -371,7 +367,6 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan):
         </div>
         """
 
-    # 대운 UI (8칸)
     st.markdown("#### 🌊 10년 주기 대운 흐름")
     st.caption("※ 대운수(나이)는 절기가 아닌 생일 기준 근사치입니다.")
     cols = st.columns(8)
@@ -383,7 +378,6 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan):
     st.write("")
     st.write("")
     
-    # 세운 & 월운 UI (현재 기준)
     st.markdown("#### 🎯 현재 운세 (세운 / 월운)")
     now = datetime.now()
     col1, col2, _ = st.columns([1.5, 1.5, 5])
@@ -397,7 +391,7 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan):
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
-st.title("🔮 북극이네 사주팔자 분석기")
+st.title("🔮 내 사주팔자 분석기")
 st.markdown("""
 <div style="font-size:15px; color:#555; line-height:1.6;">
 내 팔자는 어떻길래..<br>
@@ -429,18 +423,24 @@ with st.form("saju_form", clear_on_submit=False):
     if submitted:
         if not nickname: st.error("닉네임을 적어주세요!")
         else:
-            original_dt = datetime.combine(birth_date, birth_time)
-            adjusted_dt = original_dt + timedelta(minutes=30) # 한국 표준시 오차 보정
-            
-            year_pillar = calc.get_year_pillar(adjusted_dt.year)
-            month_pillar = calc.get_month_pillar(year_pillar, adjusted_dt)
-            day_pillar = calc.get_day_pillar(adjusted_dt)
-            
-            if not is_unknown_time:
+            if is_unknown_time:
+                # 🚨 [핵심 수정] 시간을 모를 때는 시간 보정(+30분)을 하지 않고, 
+                # 무조건 그날의 낮 12시 정각 기준으로 계산하여 날짜가 넘어가지 않도록 강제 방어!
+                safe_dt = datetime.combine(birth_date, datetime.strptime("12:00", "%H:%M").time())
+                
+                year_pillar = calc.get_year_pillar(safe_dt.year)
+                month_pillar = calc.get_month_pillar(year_pillar, safe_dt)
+                day_pillar = calc.get_day_pillar(safe_dt)
+                pillars = [year_pillar, month_pillar, day_pillar, ["?", "?"]]
+            else:
+                original_dt = datetime.combine(birth_date, birth_time)
+                adjusted_dt = original_dt + timedelta(minutes=30) # 한국 표준시 오차 보정
+                
+                year_pillar = calc.get_year_pillar(adjusted_dt.year)
+                month_pillar = calc.get_month_pillar(year_pillar, adjusted_dt)
+                day_pillar = calc.get_day_pillar(adjusted_dt)
                 time_pillar = calc.get_time_pillar(day_pillar, adjusted_dt.hour)
                 pillars = [year_pillar, month_pillar, day_pillar, time_pillar]
-            else:
-                pillars = [year_pillar, month_pillar, day_pillar, ["?", "?"]]
 
             element_scores, strength_score, my_elem, logs = calc.calculate_weighted_scores(pillars)
             sibseong_scores = calc.convert_to_sibseong(my_elem, element_scores)
@@ -453,14 +453,11 @@ with st.form("saju_form", clear_on_submit=False):
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
-            # --- 사주 원국표 ---
             day_gan = day_pillar[0]
             st.markdown("### 📜 사주 원국표 (만세력)")
             draw_manse_grid(pillars, calc, day_gan)
             st.markdown("---")
             
-            # --- 🌟 대운/세운/월운 ---
-            # 현재 시간 기준으로 세운/월운 도출
             today = datetime.now()
             sewun = calc.get_year_pillar(today.year)
             wolun = calc.get_month_pillar(sewun, today)
@@ -469,7 +466,6 @@ with st.form("saju_form", clear_on_submit=False):
             draw_unse_grid(daewuns, sewun, wolun, calc, day_gan)
             st.markdown("---")
 
-            # --- 전투 리포트 및 해석 ---
             if logs:
                 st.warning(f"🏆 **오행 세력 전쟁 리포트**\n\n" + "\n".join([f"- {log}" for log in logs]))
             
