@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import altair as alt
-from datetime import datetime
+from datetime import datetime, timedelta  # 🚨 timedelta 추가됨
 
 st.set_page_config(page_title="익명 철학원", page_icon="🔮", layout="wide")
 
@@ -26,14 +26,12 @@ class SajuCalculator:
         self.ji = list("자축인묘진사오미신유술해")
         self.month_ji = list("인묘진사오미신유술해자축")
         
-        # 오행 및 음양 정보 (0: 양, 1: 음)
         self.gan_info = {
             "갑": ("목", 0), "을": ("목", 1), "병": ("화", 0), "정": ("화", 1),
             "무": ("토", 0), "기": ("토", 1), "경": ("금", 0), "신": ("금", 1),
             "임": ("수", 0), "계": ("수", 1)
         }
         
-        # 지지 십성용 음양(체용) 설정
         self.ji_info = {
             "자": ("수", 1), "축": ("토", 1), "인": ("목", 0), "묘": ("목", 1),
             "진": ("토", 0), "사": ("화", 0), "오": ("화", 1), "미": ("토", 1), 
@@ -99,7 +97,8 @@ class SajuCalculator:
 
     def get_time_pillar(self, day_pillar, hour):
         day_gan = day_pillar[0]
-        time_idx = (hour + 1) // 2 % 12
+        # 🚨 [수정] 외부에서 이미 +30분 보정된 시간이 들어오므로 그대로 2로 나눔
+        time_idx = hour // 2 % 12
         day_gan_idx = self.gan.index(day_gan)
         start_gan_idx = (day_gan_idx % 5) * 2
         return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
@@ -134,7 +133,6 @@ class SajuCalculator:
         # Step 1: 기본 점수
         for i, pillar in enumerate(pillars):
             for j, char in enumerate(pillar):
-                # 🚨 [수정] 모르는 시간 기호(?, ??)를 모두 에러 없이 건너뛰게 처리
                 if char in ["?", "??"]: 
                     continue
                 
@@ -310,7 +308,7 @@ def draw_manse_grid(pillars, calc, day_gan):
             s_bg = color_map.get(s_elem, "#EEE")
             s_txt = text_color.get(s_elem, "white")
             
-            if i == 1: s_god = "일원 (Me)" # 일주(index 1)
+            if i == 1: s_god = "일원 (Me)"
             else: s_god = calc.get_ten_gods(day_gan, stem)
             
             st.markdown(f"""
@@ -350,7 +348,7 @@ calc = SajuCalculator()
 
 sibseong_desc_db = {
     "비겁 (나/동료)": """<b>💪 비겁이 가장 강한 당신은?</b><br>자기주장과 고집이 셉니다. 주관과 신념도 뚜렷합니다. 통제해줄 관성이 부족한 경우, 하고자 하는 일을 남들이 막기 쉽지 않습니다. 그만큼 남들에게 지기 싫은 경쟁심도 강합니다.""",
-    "식상 (표현/재능)": """<b>🎨 식상이 가장 강한 당신은?</b><br>활달하고 호기심, 탐구심이 많습니다. 자유분방하며 자신을 표현하는 분야에서 두각을 보입니다. 관성을 적당히 지닌 경우 인간관계에서 기가 세다는 말을 듣습니다.""",
+    "식상 (표현/재능)": """<b>🎨 식상이 가장 강한 당신은?</b><br>활달하고 호기심, 탐구심이 많습니다. 자유분방하며 자신을 표현하는 분야에서 두각을 보닙니다. 관성을 적당히 지닌 경우 인간관계에서 기가 세다는 말을 듣습니다.""",
     "재성 (재물/결과)": """<b>💰 재성이 가장 강한 당신은?</b><br>사회생활의 달인입니다. 하지만 그만큼 돈과 인간관계와 관련된 에너지를 많이 소모합니다. 페르소나가 여러 개인 경우가 많습니다. 오행이 잘 갖춰진 경우 재물운을 타고나 풍요로운 삶을 누릴 수 있습니다.""",
     "관성 (명예/직장)": """<b>👑 관성이 가장 강한 당신은?</b><br>책임감이 강하고 원칙을 중요시합니다. 조직 생활에 적합하며 명예를 추구하는 성향이 있습니다. 자기 통제력이 좋지만, 너무 강하면 스스로를 억압하거나 강박이 생길 수 있습니다.""",
     "인성 (지혜/도움)": """<b>📚 인성이 가장 강한 당신은?</b><br>생각이 많고 인내심이 많습니다. 자립하기보다 연장자에게 의존하고자 하는 욕구가 있습니다. 우유부단한 면이 있어 재성을 갖춘 것이 좋습니다. 자존심이 세며, 관성을 잘 갖춘 경우 공부로 성취를 이루기 좋습니다."""
@@ -368,15 +366,19 @@ with st.form("saju_form", clear_on_submit=False):
     if submitted:
         if not nickname: st.error("닉네임을 적어주세요!")
         else:
-            year_pillar = calc.get_year_pillar(birth_date.year)
-            month_pillar = calc.get_month_pillar(year_pillar, birth_date)
-            day_pillar = calc.get_day_pillar(datetime.combine(birth_date, birth_time))
+            original_dt = datetime.combine(birth_date, birth_time)
+            # 🚨 [수정] 한국 표준시 오차 보정 (+30분)
+            # 11:30을 12:00으로 만들어 시간 인덱스를 정확하게 분할
+            adjusted_dt = original_dt + timedelta(minutes=30)
+            
+            year_pillar = calc.get_year_pillar(adjusted_dt.year)
+            month_pillar = calc.get_month_pillar(year_pillar, adjusted_dt)
+            day_pillar = calc.get_day_pillar(adjusted_dt)
             
             if not is_unknown_time:
-                time_pillar = calc.get_time_pillar(day_pillar, birth_time.hour)
+                time_pillar = calc.get_time_pillar(day_pillar, adjusted_dt.hour)
                 pillars = [year_pillar, month_pillar, day_pillar, time_pillar]
             else:
-                # 🚨 [수정] 모르는 시간 기호를 '?' 로 통일해서 안전하게 처리
                 pillars = [year_pillar, month_pillar, day_pillar, ["?", "?"]]
 
             element_scores, strength_score, my_elem, logs = calc.calculate_weighted_scores(pillars)
@@ -390,7 +392,6 @@ with st.form("saju_form", clear_on_submit=False):
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
-            # 만세력 원국표 (순서: 시-일-월-연)
             day_gan = day_pillar[0]
             st.markdown("### 📜 사주 원국표 (만세력)")
             draw_manse_grid(pillars, calc, day_gan)
