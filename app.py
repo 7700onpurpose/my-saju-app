@@ -105,7 +105,7 @@ class SajuCalculator:
         return self.gan[(start_gan_idx + time_idx) % 10] + self.ji[time_idx]
 
     def get_ten_gods(self, day_gan, target_char):
-        if target_char == "?" or (target_char not in self.gan_info and target_char not in self.ji_info):
+        if target_char in ["?", "??"] or (target_char not in self.gan_info and target_char not in self.ji_info):
             return ""
         day_elem, day_pol = self.gan_info[day_gan]
         if target_char in self.gan_info:
@@ -134,7 +134,9 @@ class SajuCalculator:
         # Step 1: 기본 점수
         for i, pillar in enumerate(pillars):
             for j, char in enumerate(pillar):
-                if char == "?": continue # 🚨 이 부분이 추가되었습니다! (모르는 시간 건너뛰기)
+                # 🚨 [수정] 모르는 시간 기호(?, ??)를 모두 에러 없이 건너뛰게 처리
+                if char in ["?", "??"]: 
+                    continue
                 
                 weight = base_weights[i][j]
                 elem = self.gan_elements.get(char, self.ji_elements.get(char))
@@ -149,7 +151,7 @@ class SajuCalculator:
 
         # Step 2: 천간충
         for i, pillar in enumerate(pillars):
-            if i != 2 and pillar[0] != "?":
+            if i != 2 and pillar[0] not in ["?", "??"]:
                 pair = frozenset([day_gan, pillar[0]])
                 if pair in self.chung_rules:
                     penalty = self.chung_rules[pair]
@@ -158,7 +160,7 @@ class SajuCalculator:
                     logs.append(f"💥 천간충 ({day_gan} 💥 {pillar[0]})! 내 기운 -{penalty}")
 
         # Step 3: 천간합
-        stems = [p[0] for p in pillars if p[0] != "?"]
+        stems = [p[0] for p in pillars if p[0] not in ["?", "??"]]
         for pair, changes in self.hap_rules.items():
             if pair.issubset(set(stems)):
                 for elem, score in changes.items():
@@ -169,7 +171,7 @@ class SajuCalculator:
                 logs.append(f"💖 천간합 ({' ❤️ '.join(pair)}) 성립!")
 
         # Step 4: 지지충
-        branches = [p[1] for p in pillars if p[1] != "?"]
+        branches = [p[1] for p in pillars if p[1] not in ["?", "??"]]
         branches_set = set(branches)
         for rule_set, e1, e2, sc in self.jiji_chung_rules:
             if rule_set.issubset(branches_set):
@@ -201,7 +203,7 @@ class SajuCalculator:
         # Step 6: 병존
         for seq in [stems, branches]:
             for k in range(len(seq)-1):
-                if seq[k] == seq[k+1] and seq[k] != "?":
+                if seq[k] == seq[k+1] and seq[k] not in ["?", "??"]:
                     elem = self.gan_elements.get(seq[k], self.ji_elements.get(seq[k]))
                     element_scores[elem] += 10
                     logs.append(f"👯 병존 ({seq[k]} 🤝 {seq[k]}) +10")
@@ -286,11 +288,10 @@ def draw_ohaeng_pie_chart(scores):
 def draw_manse_grid(pillars, calc, day_gan):
     color_map = {
         "목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", 
-        "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE"
+        "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE", "??": "#EEE"
     }
     text_color = {"토": "black"} 
     
-    # 순서 변경: 시주(Time) -> 일주(Day) -> 월주(Month) -> 연주(Year)
     display_pillars = [pillars[3], pillars[2], pillars[1], pillars[0]]
     titles = ["시주 (Time)", "일주 (Day)", "월주 (Month)", "연주 (Year)"]
     
@@ -374,10 +375,9 @@ with st.form("saju_form", clear_on_submit=False):
             if not is_unknown_time:
                 time_pillar = calc.get_time_pillar(day_pillar, birth_time.hour)
                 pillars = [year_pillar, month_pillar, day_pillar, time_pillar]
-                result_text = f"연주:{year_pillar} / 월주:**{month_pillar}** / 일주:**{day_pillar}** / 시주:{time_pillar}"
             else:
-                pillars = [year_pillar, month_pillar, day_pillar, ["??", "??"]]
-                result_text = f"연주:{year_pillar} / 월주:**{month_pillar}** / 일주:**{day_pillar}**"
+                # 🚨 [수정] 모르는 시간 기호를 '?' 로 통일해서 안전하게 처리
+                pillars = [year_pillar, month_pillar, day_pillar, ["?", "?"]]
 
             element_scores, strength_score, my_elem, logs = calc.calculate_weighted_scores(pillars)
             sibseong_scores = calc.convert_to_sibseong(my_elem, element_scores)
