@@ -301,9 +301,17 @@ def draw_ohaeng_pie_chart(scores):
     ).transform_filter(alt.datum.비율 > 0.03)
     return pie + text
 
+# 🌟 [NEW/수정] 지장간 데이터 추가된 원국표
 def draw_manse_grid(pillars, calc, day_gan):
     color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE", "??": "#EEE"}
     text_color = {"토": "black"} 
+    
+    # 12지지 지장간 데이터 (초기 - 중기 - 정기 순서)
+    jijanggan_dict = {
+        "자": ["임", "계"], "축": ["계", "신", "기"], "인": ["무", "병", "갑"], "묘": ["갑", "을"],
+        "진": ["을", "계", "무"], "사": ["무", "경", "병"], "오": ["병", "기", "정"], "미": ["정", "을", "기"],
+        "신": ["무", "임", "경"], "유": ["경", "신"], "술": ["신", "정", "무"], "해": ["무", "갑", "임"]
+    }
     
     display_pillars = [pillars[3], pillars[2], pillars[1], pillars[0]]
     titles = ["시주 (Time)", "일주 (Day)", "월주 (Month)", "연주 (Year)"]
@@ -316,10 +324,13 @@ def draw_manse_grid(pillars, calc, day_gan):
         with col:
             st.markdown(f"<div style='text-align:center; font-weight:bold; color:#555;'>{titles[i]}</div>", unsafe_allow_html=True)
             
+            # --- 천간 ---
             s_elem = calc.gan_elements.get(stem, "?")
             s_bg = color_map.get(s_elem, "#EEE")
             s_txt = text_color.get(s_elem, "white")
-            s_god = "일원 (Me)" if i == 1 else calc.get_ten_gods(day_gan, stem)
+            
+            if i == 1: s_god = "일원 (Me)"
+            else: s_god = calc.get_ten_gods(day_gan, stem)
             
             st.markdown(f"""
             <div style='background-color:{s_bg}; color:{s_txt}; border-radius:10px; padding:10px; margin:5px; text-align:center;'>
@@ -328,19 +339,28 @@ def draw_manse_grid(pillars, calc, day_gan):
             </div>
             """, unsafe_allow_html=True)
             
+            # --- 지지 및 🌟 지장간 ---
             b_elem = calc.ji_elements.get(branch, "?")
             b_bg = color_map.get(b_elem, "#EEE")
             b_txt = text_color.get(b_elem, "white")
             b_god = calc.get_ten_gods(day_gan, branch)
             
+            # 지장간 렌더링 준비
+            hidden_stems = jijanggan_dict.get(branch, [])
+            hidden_html = ""
+            if hidden_stems:
+                border_color = "rgba(0,0,0,0.2)" if b_elem == "토" else "rgba(255,255,255,0.4)"
+                spans = "".join([f"<span style='flex:1;'>{s}</span>" for s in hidden_stems])
+                hidden_html = f"<div style='margin-top:8px; padding-top:5px; border-top:1px dashed {border_color}; font-size:13px; font-weight:normal; display:flex; justify-content:space-between; opacity:0.9;'>{spans}</div>"
+            
             st.markdown(f"""
             <div style='background-color:{b_bg}; color:{b_txt}; border-radius:10px; padding:10px; margin:5px; text-align:center;'>
                 <div style='font-size:32px; font-weight:bold;'>{branch}</div>
                 <div style='font-size:13px; opacity:0.9;'>{b_god}</div>
+                {hidden_html}
             </div>
             """, unsafe_allow_html=True)
 
-# 🌟 [수정] 현재 속한 대운을 파악할 수 있도록 current_age 파라미터 추가
 def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age):
     color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3"}
     text_color = {"토": "black"}
@@ -379,8 +399,7 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age):
     st.write("")
     st.write("")
     
-    # 🌟 [NEW] 현재 나이 기준으로 현재 대운 찾기
-    current_dw = daewuns[0] # 첫 번째 대운을 기본값으로 세팅
+    current_dw = daewuns[0] 
     for dw in daewuns:
         if current_age >= dw['age']:
             current_dw = dw
@@ -388,7 +407,6 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age):
     st.markdown("#### 🎯 현재 운세 (대운 / 세운 / 월운)")
     now = datetime.now()
     
-    # 3개의 기둥을 보여주기 위해 컬럼 조정 (대운, 세운, 월운)
     col1, col2, col3, _ = st.columns([1.5, 1.5, 1.5, 3.5])
     
     with col1:
@@ -466,14 +484,12 @@ with st.form("saju_form", clear_on_submit=False):
             st.markdown("---")
             
             today = datetime.now()
-            # 🌟 [NEW] 명리학적 한국 나이 계산 (현재 연도 - 출생 연도 + 1)
             current_age = today.year - birth_date.year + 1
             
             sewun = calc.get_year_pillar(today.year)
             wolun = calc.get_month_pillar(sewun, today)
             daewuns = calc.get_daewun(year_pillar, month_pillar, gender, birth_date)
             
-            # 파라미터에 current_age 추가!
             draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age)
             st.markdown("---")
 
