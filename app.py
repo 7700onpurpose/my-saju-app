@@ -454,7 +454,7 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age):
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
-st.title("🔮 내 사주팔자 분석기")
+st.title("🔮 북극이네 사주팔자 분석기")
 st.markdown("""
 <div style="font-size:15px; color:#555; line-height:1.6;">
 내 팔자는 어떻길래..<br>
