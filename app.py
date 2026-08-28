@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import altair as alt
 from datetime import datetime, timedelta
+from itertools import combinations  # 🚨 [NEW] 특수관계(형파해원진) 짝짓기를 위한 모듈
 
 st.set_page_config(page_title="익명 철학원", page_icon="🔮", layout="wide")
 
@@ -146,6 +147,43 @@ class SajuCalculator:
         elif self.geuk[target_elem] == day_elem: return "편관" if day_pol == target_pol else "정관"
         elif self.saeng[target_elem] == day_elem: return "편인" if day_pol == target_pol else "정인"
         return ""
+
+    # 🌟 [NEW] 형, 파, 해, 원진 계산
+    def get_special_relations(self, pillars):
+        branches = []
+        names = ["연지", "월지", "일지", "시지"]
+        for i, p in enumerate(pillars):
+            if p[1] not in ["?", "??"]:
+                branches.append((names[i], p[1]))
+                
+        relations = []
+        for (n1, b1), (n2, b2) in combinations(branches, 2):
+            pair = frozenset([b1, b2])
+            
+            # 1. 형살 (인사신, 축술미, 자묘, 진/오/유/해 자형)
+            if pair.issubset({"인", "사", "신"}) and len(pair) == 2:
+                relations.append(f"🔥 **형살({b1}{b2}형)** : {n1}와 {n2}가 부딪혀 에너지가 소모되거나 조정이 필요한 기운이 있습니다.")
+            elif pair.issubset({"축", "술", "미"}) and len(pair) == 2:
+                relations.append(f"🔥 **형살({b1}{b2}형)** : {n1}와 {n2}가 부딪혀 갈등이나 조정이 발생하기 쉬운 기운입니다.")
+            elif pair == frozenset(["자", "묘"]):
+                relations.append(f"🔥 **형살(자묘 상형)** : {n1}와 {n2}가 만나 예의나 인간관계에서 마찰이 생길 수 있습니다.")
+            elif b1 == b2 and b1 in ["진", "오", "유", "해"]:
+                relations.append(f"🔥 **자형살({b1}{b2} 자형)** : {n1}와 {n2}가 같아 스스로 스트레스를 만들거나 고집이 강해질 수 있습니다.")
+                
+            # 2. 파살 (자유, 축진, 인해, 묘오, 사신, 술미)
+            if pair in [frozenset(["자", "유"]), frozenset(["축", "진"]), frozenset(["인", "해"]), frozenset(["묘", "오"]), frozenset(["사", "신"]), frozenset(["술", "미"])]:
+                relations.append(f"⚡ **파살({b1}{b2}파)** : {n1}와 {n2} 사이에 훼방이나 파탄의 기운이 섞여 있습니다.")
+                
+            # 3. 해살 (자미, 축오, 인사, 묘진, 신해, 유술)
+            if pair in [frozenset(["자", "미"]), frozenset(["축", "오"]), frozenset(["인", "사"]), frozenset(["묘", "진"]), frozenset(["신", "해"]), frozenset(["유", "술"])]:
+                relations.append(f"💥 **해살({b1}{b2}해)** : {n1}와 {n2}가 서로 방해하거나 손해를 입히려는 성향이 있습니다.")
+                
+            # 4. 원진살 (자미, 축오, 인유, 묘신, 진해, 사술)
+            if pair in [frozenset(["자", "미"]), frozenset(["축", "오"]), frozenset(["인", "유"]), frozenset(["묘", "신"]), frozenset(["진", "해"]), frozenset(["사", "술"])]:
+                relations.append(f"🌪️ **원진살({b1}{b2}원진)** : {n1}와 {n2}가 만나 서로 이유 없이 미워하거나 엇갈리는 기운이 존재합니다.")
+                
+        # 중복 제거 후 반환
+        return list(dict.fromkeys(relations))
 
     def calculate_weighted_scores(self, pillars):
         base_weights = [[10, 7], [17, 15], [20, 20], [10, 5]]
@@ -301,12 +339,10 @@ def draw_ohaeng_pie_chart(scores):
     ).transform_filter(alt.datum.비율 > 0.03)
     return pie + text
 
-# 🌟 [NEW/수정] 지장간 데이터 추가된 원국표
 def draw_manse_grid(pillars, calc, day_gan):
     color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE", "??": "#EEE"}
     text_color = {"토": "black"} 
     
-    # 12지지 지장간 데이터 (초기 - 중기 - 정기 순서)
     jijanggan_dict = {
         "자": ["임", "계"], "축": ["계", "신", "기"], "인": ["무", "병", "갑"], "묘": ["갑", "을"],
         "진": ["을", "계", "무"], "사": ["무", "경", "병"], "오": ["병", "기", "정"], "미": ["정", "을", "기"],
@@ -339,13 +375,12 @@ def draw_manse_grid(pillars, calc, day_gan):
             </div>
             """, unsafe_allow_html=True)
             
-            # --- 지지 및 🌟 지장간 ---
+            # --- 지지 및 지장간 ---
             b_elem = calc.ji_elements.get(branch, "?")
             b_bg = color_map.get(b_elem, "#EEE")
             b_txt = text_color.get(b_elem, "white")
             b_god = calc.get_ten_gods(day_gan, branch)
             
-            # 지장간 렌더링 준비
             hidden_stems = jijanggan_dict.get(branch, [])
             hidden_html = ""
             if hidden_stems:
@@ -478,14 +513,29 @@ with st.form("saju_form", clear_on_submit=False):
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
+            # --- 사주 원국표 (지장간 포함) ---
             day_gan = day_pillar[0]
             st.markdown("### 📜 사주 원국표 (만세력)")
             draw_manse_grid(pillars, calc, day_gan)
+            
+            # 🌟 [NEW] 형파해원진 경고판 표시
+            special_rels = calc.get_special_relations(pillars)
+            if special_rels:
+                rels_html = "<br>".join(special_rels)
+                st.markdown(f"""
+                <div style='background-color:#fff3cd; padding:15px; border-radius:10px; margin-top:10px; border-left:5px solid #ffc107;'>
+                    <div style='font-weight:bold; color:#856404; margin-bottom:8px;'>⚠️ 사주 원국 내 지지 특수 관계 (형·파·해·원진)</div>
+                    <div style='color:#664d03; font-size:14px; line-height:1.6;'>
+                        {rels_html}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
             st.markdown("---")
             
+            # --- 운세 ---
             today = datetime.now()
             current_age = today.year - birth_date.year + 1
-            
             sewun = calc.get_year_pillar(today.year)
             wolun = calc.get_month_pillar(sewun, today)
             daewuns = calc.get_daewun(year_pillar, month_pillar, gender, birth_date)
