@@ -148,7 +148,7 @@ class SajuCalculator:
         elif self.saeng[target_elem] == day_elem: return "편인" if day_pol == target_pol else "정인"
         return ""
 
-    # 🌟 [NEW] 천간합 및 지지합 계산
+    # 🌟 [수정] 천간합, 방/삼/육합 + 지지 암합(새로 추가) 계산
     def get_hap_relations(self, pillars):
         stems = []
         branches = []
@@ -168,6 +168,14 @@ class SajuCalculator:
             frozenset(["묘", "술"]): "묘술합", frozenset(["진", "유"]): "진유합",
             frozenset(["사", "신"]): "사신합", frozenset(["오", "미"]): "오미합"
         }
+        # 🚨 [NEW] 지지 암합 (대표적인 5대 암합)
+        branch_amhap_rules = {
+            frozenset(["자", "술"]): "자술 암합 (무계합)",
+            frozenset(["축", "인"]): "축인 암합 (갑기합/병신합/무계합)",
+            frozenset(["묘", "신"]): "묘신 암합 (을경합)",
+            frozenset(["인", "미"]): "인미 암합 (갑기합)",
+            frozenset(["오", "해"]): "오해 암합 (정임합/갑기합)"
+        }
         
         relations = []
         
@@ -180,12 +188,10 @@ class SajuCalculator:
         # 2. 지지 방합/삼합/반합
         b_chars = set([b for n, b in branches])
         
-        # 방합
         for rule in self.banghap_rules.values():
             if rule["members"].issubset(b_chars):
                 relations.append(f"👨‍👩‍👧‍👦 **방합 ({rule['name']} 방합)** : 같은 계절의 기운이 모여 가족이나 형제처럼 끈끈한 결속력을 가집니다.")
                 
-        # 삼합 & 반합
         for rule in self.samhap_rules.values():
             inter = rule["members"].intersection(b_chars)
             if len(inter) == 3:
@@ -199,6 +205,12 @@ class SajuCalculator:
             pair = frozenset([b1, b2])
             if pair in branch_6hap_rules:
                 relations.append(f"❤️ **육합 ({branch_6hap_rules[pair]})** : {n1}와 {n2}가 짝을 이루듯 비밀스럽고 다정하게 묶이는 기운입니다.")
+
+        # 4. 🚨 [NEW] 지지 암합
+        for (n1, b1), (n2, b2) in combinations(branches, 2):
+            pair = frozenset([b1, b2])
+            if pair in branch_amhap_rules:
+                relations.append(f"🤫 **암합 ({branch_amhap_rules[pair]})** : {n1}와 {n2}의 지장간이 결합하여, 겉으론 안 보여도 속으로 은밀하고 강하게 끌리는 기운입니다.")
                 
         return list(dict.fromkeys(relations))
 
@@ -409,7 +421,6 @@ def draw_manse_grid(pillars, calc, day_gan):
         with col:
             st.markdown(f"<div style='text-align:center; font-weight:bold; color:#555;'>{titles[i]}</div>", unsafe_allow_html=True)
             
-            # --- 천간 ---
             s_elem = calc.gan_elements.get(stem, "?")
             s_bg = color_map.get(s_elem, "#EEE")
             s_txt = text_color.get(s_elem, "white")
@@ -424,7 +435,6 @@ def draw_manse_grid(pillars, calc, day_gan):
             </div>
             """, unsafe_allow_html=True)
             
-            # --- 지지 및 지장간 ---
             b_elem = calc.ji_elements.get(branch, "?")
             b_bg = color_map.get(b_elem, "#EEE")
             b_txt = text_color.get(b_elem, "white")
@@ -562,25 +572,24 @@ with st.form("saju_form", clear_on_submit=False):
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
-            # --- 사주 원국표 ---
             day_gan = day_pillar[0]
             st.markdown("### 📜 사주 원국표 (만세력)")
             draw_manse_grid(pillars, calc, day_gan)
             
-            # 🌟 [NEW] 합(合) 알림판
+            # --- 🌟 합(合) 알림판 ---
             hap_rels = calc.get_hap_relations(pillars)
             if hap_rels:
                 hap_html = "<br>".join(hap_rels)
                 st.markdown(f"""
                 <div style='background-color:#d1e7dd; padding:15px; border-radius:10px; margin-top:10px; border-left:5px solid #198754;'>
-                    <div style='font-weight:bold; color:#0f5132; margin-bottom:8px;'>✨ 사주 원국 내 합(合)의 기운 (천간합/지지합)</div>
+                    <div style='font-weight:bold; color:#0f5132; margin-bottom:8px;'>✨ 사주 원국 내 합(合)의 기운 (천간/지지/암합)</div>
                     <div style='color:#146c43; font-size:14px; line-height:1.6;'>
                         {hap_html}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
             
-            # --- 형파해원진 경고판 ---
+            # --- ⚠️ 형파해원진 경고판 ---
             special_rels = calc.get_special_relations(pillars)
             if special_rels:
                 rels_html = "<br>".join(special_rels)
@@ -595,7 +604,6 @@ with st.form("saju_form", clear_on_submit=False):
                 
             st.markdown("---")
             
-            # --- 운세 ---
             today = datetime.now()
             current_age = today.year - birth_date.year + 1
             sewun = calc.get_year_pillar(today.year)
