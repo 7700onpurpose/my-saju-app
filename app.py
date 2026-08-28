@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import altair as alt
 from datetime import datetime, timedelta
-from itertools import combinations  # 🚨 [NEW] 특수관계(형파해원진) 짝짓기를 위한 모듈
+from itertools import combinations
 
 st.set_page_config(page_title="익명 철학원", page_icon="🔮", layout="wide")
 
@@ -148,7 +148,61 @@ class SajuCalculator:
         elif self.saeng[target_elem] == day_elem: return "편인" if day_pol == target_pol else "정인"
         return ""
 
-    # 🌟 [NEW] 형, 파, 해, 원진 계산
+    # 🌟 [NEW] 천간합 및 지지합 계산
+    def get_hap_relations(self, pillars):
+        stems = []
+        branches = []
+        names = ["연", "월", "일", "시"]
+        
+        for i, p in enumerate(pillars):
+            if p[0] not in ["?", "??"]: stems.append((names[i]+"간", p[0]))
+            if p[1] not in ["?", "??"]: branches.append((names[i]+"지", p[1]))
+            
+        stem_hap_rules = {
+            frozenset(["갑", "기"]): "갑기합", frozenset(["을", "경"]): "을경합",
+            frozenset(["병", "신"]): "병신합", frozenset(["정", "임"]): "정임합",
+            frozenset(["무", "계"]): "무계합"
+        }
+        branch_6hap_rules = {
+            frozenset(["자", "축"]): "자축합", frozenset(["인", "해"]): "인해합",
+            frozenset(["묘", "술"]): "묘술합", frozenset(["진", "유"]): "진유합",
+            frozenset(["사", "신"]): "사신합", frozenset(["오", "미"]): "오미합"
+        }
+        
+        relations = []
+        
+        # 1. 천간합
+        for (n1, s1), (n2, s2) in combinations(stems, 2):
+            pair = frozenset([s1, s2])
+            if pair in stem_hap_rules:
+                relations.append(f"💞 **천간합 ({stem_hap_rules[pair]})** : {n1}와 {n2}가 만나 뜻이 통하고 다정하게 화합합니다.")
+                
+        # 2. 지지 방합/삼합/반합
+        b_chars = set([b for n, b in branches])
+        
+        # 방합
+        for rule in self.banghap_rules.values():
+            if rule["members"].issubset(b_chars):
+                relations.append(f"👨‍👩‍👧‍👦 **방합 ({rule['name']} 방합)** : 같은 계절의 기운이 모여 가족이나 형제처럼 끈끈한 결속력을 가집니다.")
+                
+        # 삼합 & 반합
+        for rule in self.samhap_rules.values():
+            inter = rule["members"].intersection(b_chars)
+            if len(inter) == 3:
+                relations.append(f"🤝 **삼합 ({rule['name']} 삼합)** : 서로 다른 기운이 모여 사회적, 목적 지향적으로 강력하게 화합합니다.")
+            elif len(inter) == 2:
+                matched_str = "".join([char for char in rule["name"] if char in inter])
+                relations.append(f"🤝 **반합 ({matched_str} 반합)** : 삼합의 기운을 일부 공유하며 같은 목적을 향해 무리를 짓는 기운입니다.")
+                
+        # 3. 지지 육합
+        for (n1, b1), (n2, b2) in combinations(branches, 2):
+            pair = frozenset([b1, b2])
+            if pair in branch_6hap_rules:
+                relations.append(f"❤️ **육합 ({branch_6hap_rules[pair]})** : {n1}와 {n2}가 짝을 이루듯 비밀스럽고 다정하게 묶이는 기운입니다.")
+                
+        return list(dict.fromkeys(relations))
+
+    # 형, 파, 해, 원진 계산
     def get_special_relations(self, pillars):
         branches = []
         names = ["연지", "월지", "일지", "시지"]
@@ -160,7 +214,6 @@ class SajuCalculator:
         for (n1, b1), (n2, b2) in combinations(branches, 2):
             pair = frozenset([b1, b2])
             
-            # 1. 형살 (인사신, 축술미, 자묘, 진/오/유/해 자형)
             if pair.issubset({"인", "사", "신"}) and len(pair) == 2:
                 relations.append(f"🔥 **형살({b1}{b2}형)** : {n1}와 {n2}가 부딪혀 에너지가 소모되거나 조정이 필요한 기운이 있습니다.")
             elif pair.issubset({"축", "술", "미"}) and len(pair) == 2:
@@ -170,19 +223,15 @@ class SajuCalculator:
             elif b1 == b2 and b1 in ["진", "오", "유", "해"]:
                 relations.append(f"🔥 **자형살({b1}{b2} 자형)** : {n1}와 {n2}가 같아 스스로 스트레스를 만들거나 고집이 강해질 수 있습니다.")
                 
-            # 2. 파살 (자유, 축진, 인해, 묘오, 사신, 술미)
             if pair in [frozenset(["자", "유"]), frozenset(["축", "진"]), frozenset(["인", "해"]), frozenset(["묘", "오"]), frozenset(["사", "신"]), frozenset(["술", "미"])]:
                 relations.append(f"⚡ **파살({b1}{b2}파)** : {n1}와 {n2} 사이에 훼방이나 파탄의 기운이 섞여 있습니다.")
                 
-            # 3. 해살 (자미, 축오, 인사, 묘진, 신해, 유술)
             if pair in [frozenset(["자", "미"]), frozenset(["축", "오"]), frozenset(["인", "사"]), frozenset(["묘", "진"]), frozenset(["신", "해"]), frozenset(["유", "술"])]:
                 relations.append(f"💥 **해살({b1}{b2}해)** : {n1}와 {n2}가 서로 방해하거나 손해를 입히려는 성향이 있습니다.")
                 
-            # 4. 원진살 (자미, 축오, 인유, 묘신, 진해, 사술)
             if pair in [frozenset(["자", "미"]), frozenset(["축", "오"]), frozenset(["인", "유"]), frozenset(["묘", "신"]), frozenset(["진", "해"]), frozenset(["사", "술"])]:
                 relations.append(f"🌪️ **원진살({b1}{b2}원진)** : {n1}와 {n2}가 만나 서로 이유 없이 미워하거나 엇갈리는 기운이 존재합니다.")
                 
-        # 중복 제거 후 반환
         return list(dict.fromkeys(relations))
 
     def calculate_weighted_scores(self, pillars):
@@ -454,7 +503,7 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age):
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
-st.title("🔮 북극이네 사주팔자 분석기")
+st.title("🔮 내 사주팔자 분석기")
 st.markdown("""
 <div style="font-size:15px; color:#555; line-height:1.6;">
 내 팔자는 어떻길래..<br>
@@ -513,12 +562,25 @@ with st.form("saju_form", clear_on_submit=False):
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
-            # --- 사주 원국표 (지장간 포함) ---
+            # --- 사주 원국표 ---
             day_gan = day_pillar[0]
             st.markdown("### 📜 사주 원국표 (만세력)")
             draw_manse_grid(pillars, calc, day_gan)
             
-            # 🌟 [NEW] 형파해원진 경고판 표시
+            # 🌟 [NEW] 합(合) 알림판
+            hap_rels = calc.get_hap_relations(pillars)
+            if hap_rels:
+                hap_html = "<br>".join(hap_rels)
+                st.markdown(f"""
+                <div style='background-color:#d1e7dd; padding:15px; border-radius:10px; margin-top:10px; border-left:5px solid #198754;'>
+                    <div style='font-weight:bold; color:#0f5132; margin-bottom:8px;'>✨ 사주 원국 내 합(合)의 기운 (천간합/지지합)</div>
+                    <div style='color:#146c43; font-size:14px; line-height:1.6;'>
+                        {hap_html}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # --- 형파해원진 경고판 ---
             special_rels = calc.get_special_relations(pillars)
             if special_rels:
                 rels_html = "<br>".join(special_rels)
