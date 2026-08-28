@@ -39,6 +39,13 @@ class SajuCalculator:
             "신": ("금", 0), "유": ("금", 1), "술": ("토", 0), "해": ("수", 0)
         }
         
+        # 🌟 지장간 데이터 (초기-중기-본기 순서) - 공통 사용을 위해 위로 올림
+        self.jijanggan_dict = {
+            "자": ["임", "계"], "축": ["계", "신", "기"], "인": ["무", "병", "갑"], "묘": ["갑", "을"],
+            "진": ["을", "계", "무"], "사": ["무", "경", "병"], "오": ["병", "기", "정"], "미": ["정", "을", "기"],
+            "신": ["무", "임", "경"], "유": ["경", "신"], "술": ["신", "정", "무"], "해": ["무", "갑", "임"]
+        }
+        
         self.gan_elements = {k: v[0] for k, v in self.gan_info.items()}
         self.ji_elements = {k: v[0] for k, v in self.ji_info.items()}
         
@@ -148,7 +155,38 @@ class SajuCalculator:
         elif self.saeng[target_elem] == day_elem: return "편인" if day_pol == target_pol else "정인"
         return ""
 
-    # 🌟 [수정] 천간합, 방/삼/육합 + 지지 암합(새로 추가) 계산
+    # 🌟 [NEW] 격국 계산기 추가
+    def get_gyeokguk(self, pillars):
+        day_gan = pillars[2][0]
+        month_ji = pillars[1][1]
+        
+        if month_ji in ["?", "??"]:
+            return "월지 미상 (알 수 없음)"
+            
+        hidden_stems = self.jijanggan_dict[month_ji]
+        main_qi = hidden_stems[-1] # 지장간의 본기(가장 강력한 기운)
+        
+        # 연간, 월간, 시간 (일간은 제외)
+        stems = [pillars[0][0], pillars[1][0], pillars[3][0]]
+        
+        gyeok_stem = None
+        # 지장간 본기 -> 중기 -> 초기 순서로 투출(천간에 있는지) 여부 확인
+        for h_stem in reversed(hidden_stems):
+            if h_stem in stems:
+                gyeok_stem = h_stem
+                break
+                
+        # 아무것도 투출하지 않았다면, 월지의 본기를 격으로 잡음
+        if gyeok_stem is None:
+            gyeok_stem = main_qi
+            
+        ten_god = self.get_ten_gods(day_gan, gyeok_stem)
+        
+        # 비견/겁재는 특수격 처리
+        if ten_god == "비견": return "건록격(建祿格)"
+        elif ten_god == "겁재": return "양인격(羊刃格)"
+        else: return f"{ten_god}격"
+
     def get_hap_relations(self, pillars):
         stems = []
         branches = []
@@ -168,7 +206,6 @@ class SajuCalculator:
             frozenset(["묘", "술"]): "묘술합", frozenset(["진", "유"]): "진유합",
             frozenset(["사", "신"]): "사신합", frozenset(["오", "미"]): "오미합"
         }
-        # 🚨 [NEW] 지지 암합 (대표적인 5대 암합)
         branch_amhap_rules = {
             frozenset(["자", "술"]): "자술 암합 (무계합)",
             frozenset(["축", "인"]): "축인 암합 (갑기합/병신합/무계합)",
@@ -179,13 +216,11 @@ class SajuCalculator:
         
         relations = []
         
-        # 1. 천간합
         for (n1, s1), (n2, s2) in combinations(stems, 2):
             pair = frozenset([s1, s2])
             if pair in stem_hap_rules:
                 relations.append(f"💞 **천간합 ({stem_hap_rules[pair]})** : {n1}와 {n2}가 만나 뜻이 통하고 다정하게 화합합니다.")
                 
-        # 2. 지지 방합/삼합/반합
         b_chars = set([b for n, b in branches])
         
         for rule in self.banghap_rules.values():
@@ -200,13 +235,11 @@ class SajuCalculator:
                 matched_str = "".join([char for char in rule["name"] if char in inter])
                 relations.append(f"🤝 **반합 ({matched_str} 반합)** : 삼합의 기운을 일부 공유하며 같은 목적을 향해 무리를 짓는 기운입니다.")
                 
-        # 3. 지지 육합
         for (n1, b1), (n2, b2) in combinations(branches, 2):
             pair = frozenset([b1, b2])
             if pair in branch_6hap_rules:
                 relations.append(f"❤️ **육합 ({branch_6hap_rules[pair]})** : {n1}와 {n2}가 짝을 이루듯 비밀스럽고 다정하게 묶이는 기운입니다.")
 
-        # 4. 🚨 [NEW] 지지 암합
         for (n1, b1), (n2, b2) in combinations(branches, 2):
             pair = frozenset([b1, b2])
             if pair in branch_amhap_rules:
@@ -214,7 +247,6 @@ class SajuCalculator:
                 
         return list(dict.fromkeys(relations))
 
-    # 형, 파, 해, 원진 계산
     def get_special_relations(self, pillars):
         branches = []
         names = ["연지", "월지", "일지", "시지"]
@@ -404,12 +436,6 @@ def draw_manse_grid(pillars, calc, day_gan):
     color_map = {"목": "#4CAF50", "화": "#FF5252", "토": "#FFC107", "금": "#9E9E9E", "수": "#2196F3", "?": "#EEE", "??": "#EEE"}
     text_color = {"토": "black"} 
     
-    jijanggan_dict = {
-        "자": ["임", "계"], "축": ["계", "신", "기"], "인": ["무", "병", "갑"], "묘": ["갑", "을"],
-        "진": ["을", "계", "무"], "사": ["무", "경", "병"], "오": ["병", "기", "정"], "미": ["정", "을", "기"],
-        "신": ["무", "임", "경"], "유": ["경", "신"], "술": ["신", "정", "무"], "해": ["무", "갑", "임"]
-    }
-    
     display_pillars = [pillars[3], pillars[2], pillars[1], pillars[0]]
     titles = ["시주 (Time)", "일주 (Day)", "월주 (Month)", "연주 (Year)"]
     cols = st.columns(4)
@@ -440,7 +466,7 @@ def draw_manse_grid(pillars, calc, day_gan):
             b_txt = text_color.get(b_elem, "white")
             b_god = calc.get_ten_gods(day_gan, branch)
             
-            hidden_stems = jijanggan_dict.get(branch, [])
+            hidden_stems = calc.jijanggan_dict.get(branch, [])
             hidden_html = ""
             if hidden_stems:
                 border_color = "rgba(0,0,0,0.2)" if b_elem == "토" else "rgba(255,255,255,0.4)"
@@ -513,7 +539,7 @@ def draw_unse_grid(daewuns, sewun, wolun, calc, day_gan, current_age):
 # ---------------------------------------------------------
 # [화면 구성]
 # ---------------------------------------------------------
-st.title("🔮 북극이네 사주팔자 잘 보는 집")
+st.title("🔮 내 사주팔자 분석기")
 st.markdown("""
 <div style="font-size:15px; color:#555; line-height:1.6;">
 내 팔자는 어떻길래..<br>
@@ -524,6 +550,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 calc = SajuCalculator()
+
+# 🌟 격국 해석 사전 추가
+gyeok_desc_db = {
+    "건록격(建祿格)": "자수성가의 아이콘! 독립심이 강하고 자기 능력으로 일어섭니다.",
+    "양인격(羊刃格)": "강력한 카리스마와 추진력! 난관을 돌파하는 불굴의 의지가 있습니다.",
+    "식신격": "평생 먹을 복이 있고 온화하며, 한 분야를 깊게 파고드는 전문성이 있습니다.",
+    "상관격": "뛰어난 두뇌와 화술! 창의적이고 다재다능하며 불의를 참지 못합니다.",
+    "정재격": "성실함과 신용의 대명사! 알뜰하게 재물을 모으고 안정적인 삶을 추구합니다.",
+    "편재격": "뛰어난 공간지각력과 사업수완! 통이 크고 융통성이 좋으며 재물 스케일이 큽니다.",
+    "정관격": "바른 사나이, 원칙주의자! 책임감이 강하고 조직/직장 생활에 가장 최적화되어 있습니다.",
+    "편관격": "난세의 영웅, 권위와 카리스마! 명예를 중시하며 어려움을 이겨내는 권력의 기운입니다.",
+    "정인격": "학자와 선비의 기운! 도덕적이고 지혜로우며 타인의 인정과 도움(인덕)을 잘 받습니다.",
+    "편인격": "비상한 눈치와 눈썰미! 신비로운 학문이나 특수 분야(예술, 기술, 철학)에서 천재성을 발휘합니다."
+}
 
 sibseong_desc_db = {
     "비겁 (나/동료)": """<b>💪 비겁이 가장 강한 당신은?</b><br>자기주장과 고집이 셉니다. 주관과 신념도 뚜렷합니다. 통제해줄 관성이 부족한 경우, 하고자 하는 일을 남들이 막기 쉽지 않습니다. 그만큼 남들에게 지기 싫은 경쟁심도 강합니다.""",
@@ -572,11 +612,22 @@ with st.form("saju_form", clear_on_submit=False):
             
             st.success(f"✅ 분석 완료! {nickname}님은 **'{day_pillar}'일주** 입니다.")
             
+            # --- 🌟 격국 도출 및 UI 표시 ---
+            gyeokguk_name = calc.get_gyeokguk(pillars)
+            gyeokguk_desc = gyeok_desc_db.get(gyeokguk_name, "특수 격국이거나 해석이 업데이트 중입니다.")
+            
+            st.markdown(f"""
+            <div style="background-color:#e3f2fd; padding:15px; border-radius:10px; margin-bottom:20px; border-left:5px solid #0288d1;">
+                <h4 style="color:#01579b; margin-bottom:5px; margin-top:0px;">🎯 당신의 격국 (사회적 무기): {gyeokguk_name}</h4>
+                <p style="font-size:15px; color:#333; margin:0;">{gyeokguk_desc}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # --- 사주 원국표 ---
             day_gan = day_pillar[0]
             st.markdown("### 📜 사주 원국표 (만세력)")
             draw_manse_grid(pillars, calc, day_gan)
             
-            # --- 🌟 합(合) 알림판 ---
             hap_rels = calc.get_hap_relations(pillars)
             if hap_rels:
                 hap_html = "<br>".join(hap_rels)
@@ -589,7 +640,6 @@ with st.form("saju_form", clear_on_submit=False):
                 </div>
                 """, unsafe_allow_html=True)
             
-            # --- ⚠️ 형파해원진 경고판 ---
             special_rels = calc.get_special_relations(pillars)
             if special_rels:
                 rels_html = "<br>".join(special_rels)
